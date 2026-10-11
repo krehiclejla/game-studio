@@ -2,7 +2,7 @@
 // agent turn each. A job is remembered in storage until its result lands in
 // assets.json, so leaving the tab or reopening the studio keeps the status.
 import { useEffect, useState } from 'react'
-import { CREATIVE_MODEL } from './assetPrompt.js'
+import { modelFor } from './aiModel.js'
 
 const JOB_TIMEOUT_MS = 8 * 60 * 1000
 const MAX_JOBS = 12
@@ -73,7 +73,7 @@ export function useAiJobs(storageKey, assets, onRefresh) {
     const next = [job, ...jobs].slice(0, MAX_JOBS)
     save(next)
     try {
-      await window.mobius.chat.start({ model: CREATIVE_MODEL, scope: `${group}:${job.id}`, ownerVisible: false, title, systemPrompt, draft })
+      await window.mobius.chat.start({ ...(await modelFor('creative')), scope: `${group}:${job.id}`, ownerVisible: false, title, systemPrompt, draft })
     } catch {
       save(next.map((j) => (j.id === job.id ? { ...j, status: 'failed' } : j)))
     }

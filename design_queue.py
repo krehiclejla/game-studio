@@ -24,7 +24,20 @@ APP = os.environ.get('APP_ID', '12')
 JOBS = 'design-jobs.json'
 MAX_RUNNING = 2   # 3D is made one step at a time on this machine; two keeps it busy
 TIMEOUT_MS = 20 * 60 * 1000
-MODEL = 'claude-opus-5-5'
+CREATIVE = ('claude-opus-5-5', 'claude-opus', 'claude-sonnet')  # preferred families, best first
+
+
+def creative_model():
+    """A strong model the person has connected (Möbius lists only those), else None so
+    the chat uses their own default model."""
+    status, data, _ = call('GET', '/api/models')
+    ids = [str(m.get('id')) for models in ((data or {}).get('providers') or {}).values() for m in models
+           if m.get('available', True)] if status == 200 else []
+    for prefix in CREATIVE:
+        hit = next((i for i in ids if i.startswith(prefix)), None)
+        if hit:
+            return hit
+    return None
 
 
 def call(method, path, body=None, headers=None):
@@ -61,7 +74,7 @@ def planned_job(parent, item, index, now):
         system = (prompts or {}).get('pictureTo3d') if status == 200 else None
     return {'id': job_id, 'name': item['name'], 'description': item['description'], 'body': item.get('body'), 'height': item.get('height'),
             'role': item.get('role'), 'build': item.get('build'), 'weapon': item.get('weapon'), 'group': group, 'source': 'ai', 'dim': '3d', 'files': [], 'change': None, 'queued': True,
-            'startedAt': now + index, 'launch': {'title': f"Design {item['name']}", 'systemPrompt': system, 'content': content, 'model': MODEL}}
+            'startedAt': now + index, 'launch': {'title': f"Design {item['name']}", 'systemPrompt': system, 'content': content}}
 
 
 def running(job, now):
@@ -117,7 +130,7 @@ def one_pass():
             continue
         st, res, _ = call('POST', '/api/app-chats/start', {
             'scope': f"design:{job['id']}", 'owner_visible': False, 'title': launch.get('title') or f"Design {job['name']}",
-            'system_prompt': launch['systemPrompt'], 'model': launch.get('model') or MODEL, 'content': launch['content'], 'timezone': 'UTC'})
+            'system_prompt': launch['systemPrompt'], **({'model': m} if (m := launch.get('model') or creative_model()) else {}), 'content': launch['content'], 'timezone': 'UTC'})
         if st in (200, 201, 202):
             job.update(queued=False, startedAt=now, chatId=(res or {}).get('chat_id'))
             busy += 1

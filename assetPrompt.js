@@ -1,7 +1,3 @@
-// Hidden app chats default to the light background model; creative work
-// (designing, modelling, building games) needs the strongest one.
-export const CREATIVE_MODEL = 'claude-opus-5-5'
-
 // Asset making: the Assets tab starts one small hidden agent turn per request.
 // The agent draws the asset itself (SVG or a pixel grid, or ZzFX numbers for a
 // sound), checks a rendered preview, and saves it with make_asset.py. Free: no

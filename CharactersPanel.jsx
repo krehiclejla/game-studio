@@ -3,7 +3,7 @@
 // page, where its own AI chat gives it a role, animations and new looks.
 import React, { useEffect, useState } from 'react'
 import { Plus, Reload, Sparkles, UploadDocuments, X } from '@openai/apps-sdk-ui/components/Icon'
-import { CREATIVE_MODEL, CHARACTER_TYPES, designAgentPrompt, designDraft, pictureTo3dAgentPrompt, sourceDraft, sourcerAgentPrompt } from './assetPrompt.js'
+import { CHARACTER_TYPES, designAgentPrompt, designDraft, pictureTo3dAgentPrompt, sourceDraft, sourcerAgentPrompt } from './assetPrompt.js'
 import { readModel } from './ModelView.jsx'
 import { cleanName, nameFrom, uniqueName, updateShared } from './aiJobs.js'
 import { SheetPreview } from './libraryUi.jsx'
@@ -61,7 +61,6 @@ function useDesignJobs(appId, token) {
     const extra = [job.body && `--body ${job.body}`, job.height && `--height ${job.height}`, job.role && `--role ${job.role}`].filter(Boolean).join(' ')
     return {
       title: `Design ${name}`,
-      model: CREATIVE_MODEL,
       systemPrompt: (source === 'ai' || (source === 'import' && dim === '3d')) && dim === '3d' ? pictureTo3dAgentPrompt(appId) : source !== 'ai' ? sourcerAgentPrompt(appId) : designAgentPrompt(appId),
       content: source === 'import' && dim === '3d'
         ? `Make a 3D character named "${name}" from the picture the person uploaded (storage path, download with mapi): ${files.join(', ')}. ${description ? `Their note: ${description}. ` : ''}Use the uploaded picture as the concept (step 1). If the upload is already a 3D model (.glb/.fbx), convert or pack it instead and rig only if it has no skeleton.\nSave the design with --job ${id} --source import --prompt ${JSON.stringify(description || 'imported picture')}`

@@ -1,7 +1,7 @@
 {
   "id": "game-studio",
   "name": "Game Studio",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "Describe a game, play it on your phone or computer, and make its sprites and sounds.",
   "entry": "index.jsx",
   "icon": "icon.png",
@@ -38,6 +38,7 @@
     "voice_lines.py",
     "assetPrompt.js",
     "aiJobs.js",
+    "aiModel.js",
     "libraryUi.jsx",
     "CharactersPanel.jsx",
     "CharacterPage.jsx",
@@ -249,7 +250,7 @@
   "package_id": "6c500b10-c93b-45f3-a2a5-007db0f60b6d",
   "store": {
     "tagline": "Describe a game, then play and build it on your phone or computer",
-    "description": "Tell the studio's agent what game you want and it builds a playable version: 2D games, 3D worlds and Godot scenes that run on phones and computers.\n\n• Studio: play your game, switch to Edit to tap things and ask the agent to change them, with undo and a version saved after every turn.\n• Characters: make and dress 3D characters your games can use.\n• Assets: pixel sprites, picture uploads, sound effects, plus free CC0 sounds, music, skies and ground materials from Kenney, OpenGameArt, Poly Haven and ambientCG.\n• Each game is a Project with its own history; share it to play or invite people to work on it together.\n• Phone controls (on-screen stick and buttons), keyboard and gamepads.\n\nOptional: a Hugging Face or 3D AI Studio key unlocks AI-made 3D models.",
+    "description": "Tell the studio's agent what game you want and it builds a playable version: 2D games, 3D worlds and Godot scenes that run on phones and computers.\n\n• Studio: play your game, switch to Edit to tap things and ask the agent to change them, with undo and a version saved after every turn.\n• Characters: make and dress 3D characters your games can use.\n• Assets: pixel sprites, picture uploads, sound effects, plus free CC0 sounds, music, skies and ground materials from Kenney, OpenGameArt, Poly Haven and ambientCG.\n• Each game is a Project with its own history; share it to play or invite people to work on it together.\n• Phone controls (on-screen stick and buttons), keyboard and gamepads.\n\nOptional: a Hugging Face or 3D AI Studio key unlocks AI-made 3D models.\n\nFirst game: the studio downloads the free Godot game engine once (about 1.4 GB, a minute or two), with progress on screen. 3D modelling downloads Blender (about 400 MB) the first time it's used. Works with whichever AI you've connected.",
     "screenshots": [
       {
         "src": "static/store/studio.png",

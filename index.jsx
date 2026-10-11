@@ -11,11 +11,11 @@ import { studioAgentPrompt } from './agentPrompt.js'
 import SceneEditor, { SCENE_CSS } from './SceneEditor.jsx'
 import { REQUESTS_CSS, RequestsSheet, askMessage, noteMessage, usePlaytestNotes, useRequestBoard } from './requestsBoard.jsx'
 import { EMPTY_SCENE, sceneDocument } from './sceneRuntime.js'
-import { CREATIVE_MODEL } from './assetPrompt.js'
 import { STARTER_HTML, STARTER_META } from './starter.js'
 import { STARTER_3D_HTML, STARTER_3D_META } from './starter3d.js'
 import { MODEL_CATALOG, blobToBase64, checkModelFile, fetchCatalogModel } from './models.js'
 import { createVoice } from './voice.js'
+import { modelFor, setModelToken } from './aiModel.js'
 
 const CSS = `
 * { box-sizing: border-box; }
@@ -322,7 +322,6 @@ function godotEngineFiles() {
   }).catch((err) => { godotEnginePromise = null; throw err })
   return godotEnginePromise
 }
-const PUBLISH_MODEL = 'claude-haiku-4-5-20251001'
 const isHiddenGame = (id) => String(id || '').startsWith('_')
 
 // A project guest (editor or maintainer) runs the studio from the shared
@@ -466,8 +465,8 @@ function StudioChat({ appId, game, onTurnDone, onSent }) {
     let handle
     let disposed = false
     setError('')
-    window.mobius.chat({
-      model: CREATIVE_MODEL,
+    modelFor('creative').then((pick) => window.mobius.chat({
+      ...pick,
       mount,
       persist: `chats/${game.id}.json`,
       systemPrompt: studioAgentPrompt({ appId, game }),
@@ -479,7 +478,7 @@ function StudioChat({ appId, game, onTurnDone, onSent }) {
         : 'Describe your game, like "I want a 2D platformer" or "a 3D forest". Then keep shaping it: "add a meadowy platform to jump on", "use my pink-cat as the hero".',
       onMessageSent: () => sentRef.current?.(),
       onTurnDone: () => turnDoneRef.current?.(),
-    }).then((h) => { if (disposed) h.destroy(); else handle = h })
+    })).then((h) => { if (disposed) h.destroy(); else handle = h })
       .catch((err) => setError(err?.message || 'The studio agent could not start.'))
     return () => { disposed = true; handle?.destroy() }
   }, [appId, game.id])
@@ -564,6 +563,7 @@ function BuildTogetherSheet({ gameName, onOpen, onClose }) {
 }
 
 export default function App({ appId, token }) {
+  setModelToken(token)
   const [games, setGames] = useState([])
   const [confirmDelete, setConfirmDelete] = useState(null)
   // Godot games work like the old scene builder: Edit shows the world frozen with a free camera
@@ -640,6 +640,39 @@ export default function App({ appId, token }) {
   const game = games.find((g) => g.id === currentId) || null
   // switching between the preview and the full-screen game restarts a Godot game in that mode
   const isGodot = game?.kind === 'godot'
+  const [startInfo, setStartInfo] = useState(null)
+  const [clock, setClock] = useState(() => Date.now())
+  useEffect(() => {
+    setStartInfo(null)
+    if (!currentId || !isGodot) return undefined
+    let alive = true
+    store().get(`games/${currentId}.start.json`).then((v) => alive && setStartInfo(v || null)).catch(() => {})
+    const off = store().subscribe(`games/${currentId}.start.json`, (v) => alive && setStartInfo(v || null))
+    return () => { alive = false; off?.() }
+  }, [currentId, isGodot])
+  const startPending = html === '' && ['queued', 'engine', 'building'].includes(startInfo?.state)
+  // The server writes the start file, and storage subscriptions only hear this
+  // window's own writes: read the server's copy every few seconds until it settles.
+  useEffect(() => {
+    if (!startPending) return undefined
+    const id = currentId
+    const timer = setInterval(async () => {
+      setClock(Date.now())
+      const fresh = await store().getWithVersion(`games/${id}.start.json`).catch(() => null)
+      if (!fresh?.value) return
+      setStartInfo(fresh.value)
+      if (fresh.value.state !== 'done') return
+      const built = await store().getWithVersion(`games/${id}.html`, 'text').catch(() => null)
+      if (typeof built?.value === 'string' && built.value) {
+        setHtml(built.value)
+        setReloadKey((k) => k + 1)
+      }
+    }, 4000)
+    return () => clearInterval(timer)
+  }, [startPending, currentId])
+  // No word from the helper for a while (it never ran, or stopped mid-way) counts as failed.
+  const startStalled = startPending && clock - Date.parse(startInfo.at || 0) > (startInfo.state === 'queued' ? 3 : 8) * 60000
+  const startFailed = html === '' && (startInfo?.state === 'failed' || startStalled)
   useEffect(() => { if (isGodot) setReloadKey((k) => k + 1) }, [focus, godotPlay])
   useEffect(() => { setGodotPlay(false); setGodotObjects([]); setGodotSelected(null); setGodotCut(null); setGodotSheet(null) }, [currentId])
   godotStateRef.current = { selected: godotSelected, cut: godotCut }
@@ -780,7 +813,7 @@ export default function App({ appId, token }) {
         scope: `publish:${key}`,
         ownerVisible: false,
         title: `Install ${name} as an app`,
-        model: PUBLISH_MODEL,
+        ...(await modelFor('quick')),
         systemPrompt: 'You install Game Studio games as Möbius apps. Run the one command you are given with the Bash tool, then reply in one short sentence saying whether it worked. If it fails, say why in plain words. Do nothing else.',
         draft: `Run: python3 ${STUDIO_DIR}/publish_game.py ${appId} ${gameId}`,
       })
@@ -1057,6 +1090,22 @@ export default function App({ appId, token }) {
   const [creating, setCreating] = useState(false)
   // A genre game starts as its playable template; a blank idea starts empty
   // and goes straight to the agent.
+  // The first build of a new Godot game runs on the server in a small hidden turn
+  // (godot_build.py new). It reports to games/<id>.start.json: queued (written here),
+  // engine (the one-time Godot download, with pct), building, done or failed.
+  const startGodotGame = async ({ id, name }, retry = false) => {
+    await store().set(`games/${id}.start.json`, { state: 'queued', at: new Date().toISOString() })
+    if (!window.mobius?.chat?.start) return
+    window.mobius.chat.start({
+      scope: retry ? `godot-new:${id}:${Date.now()}` : `godot-new:${id}`,
+      ownerVisible: false,
+      title: `Start ${name}`,
+      ...(await modelFor('quick')),
+      systemPrompt: 'You start new Game Studio games. Run the one command you are given in the shell, with a 10-minute timeout (the first game downloads the game engine). Then reply in one short sentence saying whether it worked. If it fails, say why in plain words. Do nothing else.',
+      draft: `Run: python3 ${STUDIO_DIR}/godot_build.py new ${appId} ${id} ${JSON.stringify(name)}`,
+    }).catch(() => store().set(`games/${id}.start.json`, { state: 'failed', at: new Date().toISOString(), message: 'The studio could not start its helper.' }).catch(() => {}))
+  }
+
   // A game starts as an empty canvas; the person describes it in the chat.
   const createBlankGame = async ({ id = newGameId(), name = 'Untitled game' } = {}) => {
     setCreating(true)
@@ -1067,16 +1116,7 @@ export default function App({ appId, token }) {
       const meta = { id, name, kind: 'godot', genre: null, art: null, description: '', controls: 'Move with WASD or the arrows, or drag on a touch screen.', updatedAt: new Date().toISOString() }
       await store().set(`games/${id}.json`, meta)
       await store().setText(`games/${id}.html`, '', { contentType: 'text/html' })
-      if (window.mobius?.chat?.start) {
-        window.mobius.chat.start({
-          scope: `godot-new:${id}`,
-          ownerVisible: false,
-          title: `Start ${name}`,
-          model: PUBLISH_MODEL,
-          systemPrompt: 'You start new Game Studio games. Run the one command you are given with the Bash tool (it can take a few minutes the first time), then reply in one short sentence saying whether it worked. If it fails, say why in plain words. Do nothing else.',
-          draft: `Run: python3 ${STUDIO_DIR}/godot_build.py new ${appId} ${id} ${JSON.stringify(name)}`,
-        }).catch(() => setLoadError('The new game could not be built. Ask the assistant to "build the game".'))
-      }
+      await startGodotGame(meta)
       setGames((list) => [meta, ...list])
       setCurrentId(id)
       setTab('studio')
@@ -1147,7 +1187,7 @@ export default function App({ appId, token }) {
       if (!res.ok) throw new Error(res.status === 409 ? 'The studio agent is still working on the last request. Try again when it finishes.' : 'The studio chat did not accept that. Try again.')
     } else {
       const { chatId } = await window.mobius.chat.start({
-        model: CREATIVE_MODEL,
+        ...(await modelFor('creative')),
         scope: `game:${target.id}`, ownerVisible: false, title: target.name,
         systemPrompt: studioAgentPrompt({ appId, game: target }), draft: text,
       })
@@ -1214,7 +1254,7 @@ export default function App({ appId, token }) {
         scope: `share:${currentId}:${Date.now()}`,
         ownerVisible: false,
         title: stop ? `Stop sharing ${name}` : `Share ${name} to play`,
-        model: PUBLISH_MODEL,
+        ...(await modelFor('quick')),
         systemPrompt: 'You share Game Studio games as public play links. Run the one command you are given with the Bash tool, then reply in one short sentence saying whether it worked. If it fails, say why in plain words. Do nothing else.',
         draft: `Run: python3 ${STUDIO_DIR}/share_game.py ${appId} ${currentId}${stop ? ' --stop' : ''}`,
       })
@@ -1261,7 +1301,7 @@ export default function App({ appId, token }) {
     setGodotUndoing(true)
     try {
       await window.mobius.chat.start({
-        scope: `godot-undo:${currentId}:${Date.now()}`, ownerVisible: false, title: `Undo in ${game?.name || 'the game'}`, model: PUBLISH_MODEL,
+        scope: `godot-undo:${currentId}:${Date.now()}`, ownerVisible: false, title: `Undo in ${game?.name || 'the game'}`, ...(await modelFor('quick')),
         systemPrompt: 'You undo the last step of a Game Studio game. Run the one command you are given with the Bash tool, then reply in one short sentence saying whether it worked. If it says there is nothing to undo, say so. Do nothing else.',
         draft: `Run: python3 ${STUDIO_DIR}/godot_build.py undo ${appId} ${currentId}`,
       })
@@ -1289,7 +1329,21 @@ export default function App({ appId, token }) {
       ) : (
         <div className="gs-stage-empty">
           <div>
-            {html === '' && agentBusy ? (
+            {startFailed ? (
+              <>
+                <h2>This game could not start</h2>
+                <p>{startInfo?.message || 'Its first build stopped before it finished.'}</p>
+                <div className="gs-suggestions">
+                  <button type="button" className="gs-suggestion" onClick={() => { setClock(Date.now()); startGodotGame(game, true).catch(() => {}) }}>Try again</button>
+                </div>
+              </>
+            ) : startPending ? (
+              <>
+                <div className="gs-spinner" aria-hidden="true" />
+                <h2>{startInfo.state === 'engine' ? `Getting the game engine ready… ${startInfo.pct || 0}%` : 'Setting up your game…'}</h2>
+                <p>{startInfo.state === 'engine' ? 'Only your first game needs this one-time download.' : 'This takes a moment.'}</p>
+              </>
+            ) : html === '' && agentBusy ? (
               <>
                 <div className="gs-spinner" aria-hidden="true" />
                 <h2>Building your game…</h2>
@@ -1393,7 +1447,7 @@ export default function App({ appId, token }) {
   const deleteGame = async (id) => {
     const target = games.find((g) => g.id === id)
     const keys = [`games/${id}.html`, `games/${id}.json`, `games/${id}.art.json`, `games/${id}.scene.json`,
-      `games/${id}.saves.json`, `games/${id}.pck`, `chats/${id}.json`, `published/${id}.json`, `projects/${id}.json`]
+      `games/${id}.saves.json`, `games/${id}.pck`, `games/${id}.start.json`, `chats/${id}.json`, `published/${id}.json`, `projects/${id}.json`]
     await Promise.all(keys.map((k) => store().remove(k).catch(() => {})))
     // Godot builds: one game file per build (games/<id>.<build>.pck)
     const listed = await store().listWithStatus('games/').catch(() => ({ entries: [] }))

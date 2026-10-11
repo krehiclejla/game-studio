@@ -63,34 +63,73 @@ def exists(app, path):
     return status == 200
 
 
-def download(url, out):
+CACHE = Path.home() / '.cache' / 'game-studio' / 'godot-download'
+
+
+def download(url, out, progress=None):
+    """Fetch URL into OUT. The partial file is kept, so an interrupted first download
+    (a timeout, a restart) carries on where it stopped instead of starting over."""
     print(f'downloading {url}', flush=True)
-    with urllib.request.urlopen(url, timeout=900) as res, open(out, 'wb') as f:
-        shutil.copyfileobj(res, f)
+    part = out.with_name(out.name + '.part')
+    for attempt in range(4):
+        have = part.stat().st_size if part.exists() else 0
+        req = urllib.request.Request(url, headers={'Range': f'bytes={have}-'} if have else {})
+        try:
+            with urllib.request.urlopen(req, timeout=120) as res:
+                if have and res.status != 206:
+                    have = 0  # the server ignored the range: start again
+                total = have + int(res.headers.get('Content-Length') or 0)
+                shown = -1
+                with open(part, 'ab' if have else 'wb') as f:
+                    while chunk := res.read(1 << 20):
+                        f.write(chunk)
+                        have += len(chunk)
+                        pct = int(have * 100 / total) if total else 0
+                        if progress and pct >= shown + 2:
+                            shown = pct
+                            progress(pct)
+            part.rename(out)
+            return
+        except (urllib.error.URLError, TimeoutError, ConnectionError) as err:
+            if attempt == 3:
+                raise RuntimeError(f'Could not download the game engine ({err}). Check the internet connection and try again.')
+            time.sleep(3 * (attempt + 1))
 
 
-def install():
-    """Godot lives outside /data, so a container replacement removes it; reinstall on demand."""
-    if not BIN.exists():
-        with tempfile.TemporaryDirectory() as tmp:
-            z = Path(tmp) / 'godot.zip'
-            download(f'{RELEASE}/Godot_v{VERSION}-stable_linux.x86_64.zip', z)
+def install(progress=None):
+    """Godot lives outside /data, so a container replacement removes it; reinstall on demand.
+    The first time is a ~1.4 GB download (engine plus web export files). PROGRESS(pct) hears
+    how far it is. A lock keeps two builds from downloading it at the same time."""
+    if BIN.exists() and (TEMPLATES / 'web_nothreads_release.zip').exists():
+        return
+    import fcntl
+    CACHE.mkdir(parents=True, exist_ok=True)
+    with open(CACHE / 'install.lock', 'w') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        say = progress or (lambda pct: None)
+        if not BIN.exists():
+            z = CACHE / 'godot.zip'
+            if not z.exists():
+                download(f'{RELEASE}/Godot_v{VERSION}-stable_linux.x86_64.zip', z, lambda pct: say(pct * 10 // 100))
             BIN.parent.mkdir(parents=True, exist_ok=True)
             with zipfile.ZipFile(z) as zf:
                 name = next(n for n in zf.namelist() if n.endswith('x86_64'))
                 with zf.open(name) as src, open(BIN, 'wb') as dst:
                     shutil.copyfileobj(src, dst)
             BIN.chmod(0o755)
-    if not (TEMPLATES / 'web_nothreads_release.zip').exists():
-        with tempfile.TemporaryDirectory() as tmp:
-            t = Path(tmp) / 'templates.tpz'
-            download(f'{RELEASE}/Godot_v{VERSION}-stable_export_templates.tpz', t)
+            z.unlink()
+        if not (TEMPLATES / 'web_nothreads_release.zip').exists():
+            t = CACHE / 'templates.tpz'
+            if not t.exists():
+                download(f'{RELEASE}/Godot_v{VERSION}-stable_export_templates.tpz', t, lambda pct: say(10 + pct * 89 // 100))
             TEMPLATES.mkdir(parents=True, exist_ok=True)
             with zipfile.ZipFile(t) as zf:
                 for n in zf.namelist():
                     if n.startswith('templates/web_') or n == 'templates/version.txt':
                         with zf.open(n) as src, open(TEMPLATES / Path(n).name, 'wb') as dst:
                             shutil.copyfileobj(src, dst)
+            t.unlink()
+        say(100)
 
 
 def godot(project, *args, timeout=600):
@@ -98,8 +137,8 @@ def godot(project, *args, timeout=600):
                           capture_output=True, text=True, timeout=timeout)
 
 
-def setup(app):
-    install()
+def setup(app, progress=None):
+    install(progress)
     if exists(app, f'engine/godot-{VERSION}.wasm.gz') and exists(app, f'engine/godot-{VERSION}.js'):
         print('engine already stored')
         return
@@ -328,18 +367,33 @@ def build(app, gid, record=True):
     print(json.dumps({'built': gid, 'pack_kb': len(pck) // 1024, 'folder': str(src), 'stamp': stamp}))
 
 
+def start_status(app, gid, state, **extra):
+    """games/GID.start.json tells the studio how a new game's first build is going:
+    engine (downloading Godot, with pct), building, done or failed (with message)."""
+    body = {'state': state, 'at': datetime.now(timezone.utc).isoformat(), **extra}
+    api('PUT', f'/api/storage/apps/{app}/games/{gid}.start.json', json.dumps(body).encode(), 'application/json')
+
+
 def new(app, gid, name=None):
-    setup(app)
-    if name and not exists(app, f'games/{gid}.json'):
-        put(app, f'games/{gid}.json', json.dumps({'id': gid, 'name': name, 'kind': 'godot',
-            'controls': 'Move with WASD or the arrows, or drag on a touch screen.'}).encode(), 'application/json')
-    dst = folder(app, gid)
-    if not dst.exists():
-        shutil.copytree(STARTER, dst)
-        if name:
-            p = dst / 'project.godot'
-            p.write_text(p.read_text().replace('config/name="Godot game"', f'config/name={json.dumps(name)}'))
-    build(app, gid)
+    try:
+        start_status(app, gid, 'engine', pct=0)
+        setup(app, lambda pct: start_status(app, gid, 'engine', pct=pct))
+        start_status(app, gid, 'building')
+        if name and not exists(app, f'games/{gid}.json'):
+            put(app, f'games/{gid}.json', json.dumps({'id': gid, 'name': name, 'kind': 'godot',
+                'controls': 'Move with WASD or the arrows, or drag on a touch screen.'}).encode(), 'application/json')
+        dst = folder(app, gid)
+        if not dst.exists():
+            shutil.copytree(STARTER, dst)
+            if name:
+                p = dst / 'project.godot'
+                p.write_text(p.read_text().replace('config/name="Godot game"', f'config/name={json.dumps(name)}'))
+        build(app, gid)
+    except BaseException as err:
+        message = str(err) if isinstance(err, (RuntimeError, SystemExit)) and str(err) else 'The first build stopped before it finished.'
+        start_status(app, gid, 'failed', message=message[:300])
+        raise
+    start_status(app, gid, 'done')
 
 
 def _render(project, out, seconds=12, size=(960, 600), query=''):

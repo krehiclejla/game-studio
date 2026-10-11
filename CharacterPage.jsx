@@ -2,9 +2,10 @@
 // further with its own AI chat ("this is the hero", "add walk and jump").
 import React, { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, Play, Plus, Trash } from '@openai/apps-sdk-ui/components/Icon'
-import { CREATIVE_MODEL, editorPrompt } from './assetPrompt.js'
+import { editorPrompt } from './assetPrompt.js'
 import { SheetPreview } from './libraryUi.jsx'
 import ModelView from './ModelView.jsx'
+import { modelFor } from './aiModel.js'
 
 // Moves from the free Quaternius Universal Animation Library (CC0) that fit any humanoid:
 // [label, library clip, the name games use].
@@ -33,7 +34,6 @@ const MOVE_GROUPS = [
     ['Zombie idle', 'Zombie_Idle_Loop', 'zombie-idle'], ['Zombie attack', 'Zombie_Scratch', 'zombie-attack'],
   ]],
 ]
-const JOB_MODEL = 'claude-haiku-4-5-20251001'
 
 // Adds library moves in a small hidden agent turn (the server does the retargeting), then
 // waits for them to show up in the character's animations.
@@ -65,7 +65,7 @@ function MovesPicker({ appId, name, have, onRefresh }) {
         scope: 'moves:' + name + ':' + Date.now(),
         ownerVisible: false,
         title: 'Add moves to ' + name,
-        model: JOB_MODEL,
+        ...(await modelFor('quick')),
         systemPrompt: 'You add animations to Game Studio characters. Run the one command you are given with the Bash tool, then reply in one short sentence saying whether it worked. If it fails, say why in plain words. Do nothing else.',
         draft: 'Run: python3 /data/apps/game-studio/model_tool.py moves ' + appId + ' ' + name + ' "' + spec + '"',
       })
@@ -122,8 +122,8 @@ function CharacterChat({ appId, name, onTurnDone }) {
     if (!mount || !window.mobius?.chat) return undefined
     let handle
     let disposed = false
-    window.mobius.chat({
-      model: CREATIVE_MODEL,
+    modelFor('creative').then((pick) => window.mobius.chat({
+      ...pick,
       mount,
       persist: `character-chats/${name}.json`,
       systemPrompt: editorPrompt(appId, name),
@@ -131,7 +131,7 @@ function CharacterChat({ appId, name, onTurnDone }) {
       guidance: 'Change it by chatting: "this is the hero", "add a sword attack", "give him a red cape".',
       onMessageSent: () => setBusy(true),
       onTurnDone: () => { setBusy(false); doneRef.current?.() },
-    }).then((h) => { if (disposed) h.destroy(); else handle = h })
+    })).then((h) => { if (disposed) h.destroy(); else handle = h })
       .catch((err) => setError(err?.message || 'The character chat could not start.'))
     return () => { disposed = true; handle?.destroy() }
   }, [appId, name])
