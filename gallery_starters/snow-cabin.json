@@ -1,0 +1,126 @@
+{
+  "name": "Snow Cabin",
+  "env": "hall",
+  "size": {
+    "w": 9,
+    "l": 20,
+    "h": 3.8
+  },
+  "palette": {
+    "wall": "#7a5a3c",
+    "floor": "#8a6a48",
+    "ceiling": "#4a3424",
+    "trim": "#5a4028",
+    "accent": "#ffb070",
+    "glow": "#ffb070"
+  },
+  "floor": "wood",
+  "walls": "wood",
+  "light": {
+    "hemi": {
+      "sky": "#cfdcff",
+      "ground": "#6a4a30",
+      "intensity": 1.2
+    },
+    "ambient": 0.7,
+    "lamps": [
+      {
+        "at": [
+          0,
+          6
+        ],
+        "y": 2.6,
+        "color": "#ffb070",
+        "intensity": 10,
+        "flicker": true
+      },
+      {
+        "at": [
+          0,
+          -6
+        ],
+        "y": 2.6,
+        "color": "#ffb070",
+        "intensity": 10,
+        "flicker": true
+      }
+    ]
+  },
+  "props": [
+    {
+      "type": "window",
+      "at": [
+        0,
+        -9.94
+      ],
+      "color": "#dbe8ff",
+      "width": 2.6,
+      "height": 1.8,
+      "y": 1.9
+    },
+    {
+      "type": "campfire",
+      "at": [
+        0,
+        -8
+      ]
+    },
+    {
+      "type": "rug",
+      "at": [
+        0,
+        -6
+      ],
+      "radius": 2.4,
+      "color": "#8a3a2a"
+    },
+    {
+      "type": "plant",
+      "at": [
+        -3.4,
+        8
+      ]
+    },
+    {
+      "type": "candle",
+      "area": {
+        "center": [
+          0,
+          0
+        ],
+        "radius": 3
+      },
+      "count": 4
+    },
+    {
+      "type": "banner",
+      "at": [
+        -3.5,
+        -9.8
+      ],
+      "color": "#a8442c"
+    }
+  ],
+  "particles": [
+    {
+      "type": "embers",
+      "count": 50,
+      "color": "#ff9a40",
+      "radius": 2.5,
+      "height": 3,
+      "center": [
+        0,
+        -8
+      ]
+    },
+    {
+      "type": "dust",
+      "count": 80,
+      "color": "#ffd9a0"
+    }
+  ],
+  "stand": {
+    "style": "chain",
+    "color": "#3a2a1c"
+  }
+}

@@ -1,0 +1,110 @@
+{
+  "id": "physics-cartoon",
+  "genre": "physics",
+  "title": "Wood, stone & aliens",
+  "style": "Chunky cartoon materials",
+  "pack": "physics-assets",
+  "credit": "Kenney (kenney.nl), CC0",
+  "font": "Luckiest Guy",
+  "palette": {
+    "sky": "#d8f0ff",
+    "ink": "#3b2a1a",
+    "accent": "#ff6b3d",
+    "good": "#58b947",
+    "panel": "#fff6e6f0",
+    "shadow": "#3b2a1a55"
+  },
+  "images": [
+    {
+      "glob": "PNG/Wood elements/elementWood{010,045,012,047,011,046,016,048,019,051,017,049,000,044,054,043}.png",
+      "rename": {
+        "elementwood010": "wood_block",
+        "elementwood045": "wood_block_dmg",
+        "elementwood012": "wood_plank",
+        "elementwood047": "wood_plank_dmg",
+        "elementwood011": "wood_short",
+        "elementwood046": "wood_short_dmg",
+        "elementwood016": "wood_pillar",
+        "elementwood048": "wood_pillar_dmg",
+        "elementwood019": "wood_beam",
+        "elementwood051": "wood_beam_dmg",
+        "elementwood017": "wood_big",
+        "elementwood049": "wood_big_dmg",
+        "elementwood000": "wood_ball",
+        "elementwood044": "wood_ball_dmg",
+        "elementwood054": "wood_tri",
+        "elementwood043": "wood_tri_dmg"
+      }
+    },
+    {
+      "glob": "PNG/Stone elements/elementStone{011,046,013,048,012,047,017,049,020,052,018,050,001,045,000,044}.png",
+      "rename": {
+        "elementstone011": "stone_block",
+        "elementstone046": "stone_block_dmg",
+        "elementstone013": "stone_plank",
+        "elementstone048": "stone_plank_dmg",
+        "elementstone012": "stone_short",
+        "elementstone047": "stone_short_dmg",
+        "elementstone017": "stone_pillar",
+        "elementstone049": "stone_pillar_dmg",
+        "elementstone020": "stone_beam",
+        "elementstone052": "stone_beam_dmg",
+        "elementstone018": "stone_big",
+        "elementstone050": "stone_big_dmg",
+        "elementstone001": "stone_ball",
+        "elementstone045": "stone_ball_dmg",
+        "elementstone000": "stone_tri",
+        "elementstone044": "stone_tri_dmg"
+      }
+    },
+    {
+      "glob": "PNG/Glass elements/elementGlass{012,047,014,049,013,048,018,050,021,053,019,051,002,046,001,045}.png",
+      "rename": {
+        "elementglass012": "glass_block",
+        "elementglass047": "glass_block_dmg",
+        "elementglass014": "glass_plank",
+        "elementglass049": "glass_plank_dmg",
+        "elementglass013": "glass_short",
+        "elementglass048": "glass_short_dmg",
+        "elementglass018": "glass_pillar",
+        "elementglass050": "glass_pillar_dmg",
+        "elementglass021": "glass_beam",
+        "elementglass053": "glass_beam_dmg",
+        "elementglass019": "glass_big",
+        "elementglass051": "glass_big_dmg",
+        "elementglass002": "glass_ball",
+        "elementglass046": "glass_ball_dmg",
+        "elementglass001": "glass_tri",
+        "elementglass045": "glass_tri_dmg"
+      }
+    },
+    {
+      "glob": "PNG/Explosive elements/elementExplosive{011,049}.png",
+      "rename": {
+        "elementexplosive011": "tnt_block",
+        "elementexplosive049": "tnt_block_dmg"
+      }
+    },
+    {
+      "glob": "PNG/Aliens/alien*.png",
+      "rename": {
+        "alien": "alien_"
+      }
+    },
+    {
+      "glob": "PNG/Debris/debris*.png",
+      "max": 40
+    },
+    {
+      "glob": "PNG/Other/{grass,dirt,sand,snow,rock,bush,cactus,starGold,starSilver,starBronze,coinGold,flagRed,flagGreen}.png"
+    },
+    {
+      "glob": "PNG/Backgrounds/colored_{grass,desert,land}.png",
+      "max": 768
+    }
+  ],
+  "sounds": [
+    "new-platformer-pack:Sounds/sfx_{bump,hurt,disappear,throw,coin,magic,select}.ogg"
+  ],
+  "notes": "Materials wood_*, stone_*, glass_* share the same pieces (pixel size): block 70x70, short 140x70 (horizontal), plank 220x70 (long horizontal), pillar 70x140 (upright), beam 70x220 (tall upright), big 140x140, ball 70x70 (circle), tri 140x70 (triangle roof). Each has a cracked twin with _dmg (e.g. wood_plank_dmg) to swap in when damaged. tnt_block / tnt_block_dmg 70x70 explodes. Aliens (targets) 70x70: alien_beige|blue|green|pink|yellow + _round, _square or _suit. Debris: debrisglass_1..3, debrisstone_1..3, debriswood_1..3 (40px chips for break effects). Ground tiles 70x70: grass, dirt, sand, snow; props rock, bush, cactus; stargold/starsilver/starbronze for level stars; coingold; flagred/flaggreen. Backgrounds 768x768 full scenes (sky at top, hills at bottom): colored_grass, colored_desert, colored_land. Sounds: bump (impact), hurt, disappear (pop), throw (launch), coin, magic (win), select."
+}

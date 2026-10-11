@@ -1,0 +1,98 @@
+{
+  "name": "Desert Temple at Dawn",
+  "env": "open",
+  "hang": "ring",
+  "size": {
+    "ring": 10
+  },
+  "sky": {
+    "style": "dawn",
+    "clouds": 0.25
+  },
+  "terrain": {
+    "ground": "#d8b078",
+    "ground2": "#c89a62",
+    "rock": "#a8794a",
+    "hills": 0.45,
+    "mountains": 0.5
+  },
+  "fog": {
+    "color": "#f3c9a0",
+    "density": 0.005
+  },
+  "light": {
+    "hemi": {
+      "sky": "#ffd9b0",
+      "ground": "#c89a62",
+      "intensity": 1.1
+    },
+    "sun": {
+      "color": "#ffc890",
+      "intensity": 2.8,
+      "dir": [
+        0.5,
+        0.15,
+        -0.85
+      ]
+    }
+  },
+  "props": [
+    {
+      "type": "pillar",
+      "ring": {
+        "center": [
+          0,
+          0
+        ],
+        "radius": 16,
+        "count": 8
+      },
+      "color": "#d9bf94",
+      "height": 5
+    },
+    {
+      "type": "arch",
+      "at": [
+        0,
+        -18
+      ],
+      "color": "#d9bf94",
+      "height": 6,
+      "width": 5
+    },
+    {
+      "type": "rock",
+      "area": {
+        "center": [
+          0,
+          0
+        ],
+        "radius": 45,
+        "inner": 18
+      },
+      "count": 30,
+      "color": "#a8794a",
+      "scale": 2
+    },
+    {
+      "type": "campfire",
+      "at": [
+        3,
+        3
+      ]
+    }
+  ],
+  "particles": [
+    {
+      "type": "dust",
+      "count": 120,
+      "color": "#ffe0b0",
+      "radius": 22,
+      "height": 8
+    }
+  ],
+  "stand": {
+    "style": "pillar",
+    "color": "#d9bf94"
+  }
+}

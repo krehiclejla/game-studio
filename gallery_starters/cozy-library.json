@@ -1,0 +1,119 @@
+{
+  "name": "The Rain Library",
+  "env": "hall",
+  "size": {
+    "w": 10,
+    "l": 24,
+    "h": 5
+  },
+  "palette": {
+    "wall": "#5a4030",
+    "floor": "#6a4a30",
+    "ceiling": "#2a1c16",
+    "trim": "#8b6a48",
+    "accent": "#ffb86b",
+    "glow": "#ffb86b"
+  },
+  "floor": "wood",
+  "walls": "brick",
+  "light": {
+    "hemi": {
+      "sky": "#9a8ab8",
+      "ground": "#3a2a20",
+      "intensity": 1.0
+    },
+    "ambient": 0.6,
+    "lamps": [
+      {
+        "at": [
+          0,
+          4
+        ],
+        "y": 3.2,
+        "color": "#ffb86b",
+        "intensity": 10,
+        "flicker": true
+      }
+    ]
+  },
+  "props": [
+    {
+      "type": "bookshelf",
+      "at": [
+        -2.4,
+        -11.7
+      ]
+    },
+    {
+      "type": "bookshelf",
+      "at": [
+        2.4,
+        -11.7
+      ]
+    },
+    {
+      "type": "window",
+      "at": [
+        0,
+        -11.94
+      ],
+      "color": "#6f8fc9",
+      "width": 2.4,
+      "height": 2.8,
+      "y": 2.2
+    },
+    {
+      "type": "candle",
+      "area": {
+        "center": [
+          0,
+          0
+        ],
+        "radius": 4
+      },
+      "count": 6,
+      "y": 0.75
+    },
+    {
+      "type": "table",
+      "at": [
+        0,
+        1
+      ]
+    },
+    {
+      "type": "plant",
+      "at": [
+        -3.5,
+        9
+      ]
+    },
+    {
+      "type": "lantern",
+      "line": {
+        "from": [
+          0,
+          8
+        ],
+        "to": [
+          0,
+          -8
+        ],
+        "count": 4
+      },
+      "y": 3.4,
+      "color": "#ffb86b"
+    }
+  ],
+  "particles": [
+    {
+      "type": "dust",
+      "count": 120,
+      "color": "#ffd9a0"
+    }
+  ],
+  "stand": {
+    "style": "chain",
+    "color": "#8b6a48"
+  }
+}

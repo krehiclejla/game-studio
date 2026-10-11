@@ -1,0 +1,477 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Meadow Dash</title>
+<style>html,body{margin:0;height:100%;overflow:hidden;background:#c4e3ff;touch-action:none}</style>
+</head>
+<body>
+<script type="module">
+import Phaser from 'https://esm.sh/phaser@3.90.0'
+
+// Everything worth tweaking lives here. The level is drawn with characters:
+//   #  ground (auto-tiled)       =  floating platform (you can jump up through it)
+//   o  coin     g  gem          ?  coin block (bump it from below)
+//   s  slime    n  snail        b  bee (flies back and forth)
+//   ^  spikes   S  spring       F  goal flag     P  player start
+const CONFIG = {
+  title: 'Meadow Dash',
+  theme: 'grass',                       // terrain look: grass | snow | sand
+  backdrop: 'background_color_hills',   // background_color_hills | _trees | _desert | _mushrooms
+  player: 'player',                     // 'player' (green) or 'player2' (pink)
+  tile: 64,
+  gravity: 1900,
+  runSpeed: 330,
+  jumpSpeed: 820,
+  springSpeed: 1250,
+  coyoteMs: 110,                        // jump still works this long after leaving a ledge
+  bufferMs: 130,                        // a jump pressed this early before landing still counts
+  lives: 3,
+  enemySpeed: { s: 70, n: 45, b: 110 },
+  level: [
+    '                                                                              ',
+    '                                                                              ',
+    '                                     o o o                                    ',
+    '                   g               ========                   b          F    ',
+    '             ?                                         o o o                  ',
+    '                        o o                         ========        ooo  ###  ',
+    '        o o o         =======            b                         ##### ###  ',
+    '       =======                  o o o                    g        ###### ###  ',
+    ' P                   s         =======        n   ^^           S ####### ###  ',
+    '########    #############   #########    ######################  ####### #####',
+    '########    #############   #########    ######################  #############',
+    '########^^^^#############^^^#########^^^^######################^^#############',
+  ],
+}
+
+const T = CONFIG.tile
+const img = (name) => `${name}`
+const terrain = (part) => `terrain_${CONFIG.theme}_${part}`
+const P = CONFIG.player
+
+// Simple shapes stand in for any art that is not installed, so the game always runs.
+function fallbacks(scene) {
+  const make = (key, w, h, draw) => {
+    if (scene.textures.exists(key)) return
+    const g = scene.make.graphics({ x: 0, y: 0 }, false)
+    draw(g, w, h)
+    g.generateTexture(key, w, h)
+    g.destroy()
+  }
+  const box = (color, r = 10) => (g, w, h) => { g.fillStyle(color); g.fillRoundedRect(0, 0, w, h, r) }
+  const ground = (g, w, h) => { g.fillStyle(0x8b5a3c); g.fillRect(0, 0, w, h); g.fillStyle(0x5fbf4a); g.fillRect(0, 0, w, 14) }
+  for (const part of ['block_top_left', 'block_top', 'block_top_right', 'block_left', 'block_center', 'block_right', 'block']) make(terrain(part), T, T, part.includes('top') || part === 'block' ? ground : box(0x8b5a3c, 0))
+  for (const part of ['cloud_left', 'cloud_middle', 'cloud_right', 'cloud']) make(terrain(part), T, T, (g) => { g.fillStyle(0x5fbf4a); g.fillRoundedRect(0, 8, T, 30, 12) })
+  for (const pose of ['idle', 'walk_a', 'walk_b', 'jump', 'hit', 'duck']) make(`${P}_${pose}`, 80, 96, (g) => { g.fillStyle(0x6fd06f); g.fillRoundedRect(10, 12, 60, 80, 22); g.fillStyle(0x23304a); g.fillCircle(30, 40, 6); g.fillCircle(52, 40, 6) })
+  for (const key of ['slime_normal_walk_a', 'slime_normal_walk_b', 'slime_normal_flat', 'snail_walk_a', 'snail_walk_b', 'snail_shell', 'bee_a', 'bee_b']) make(key, 64, 64, box(key.startsWith('bee') ? 0xffd23f : 0xa05cd6, 28))
+  make('coin_gold', 64, 64, (g) => { g.fillStyle(0xffc83d); g.fillCircle(32, 32, 20) })
+  make('gem_blue', 64, 64, (g) => { g.fillStyle(0x3fa9ff); g.fillTriangle(32, 10, 52, 32, 12, 32); g.fillTriangle(12, 32, 52, 32, 32, 56) })
+  make('spikes', 64, 64, (g) => { g.fillStyle(0xc8ced8); for (let i = 0; i < 4; i++) g.fillTriangle(i * 16, 64, i * 16 + 8, 34, i * 16 + 16, 64) })
+  make('spring', 64, 64, box(0xff6b6b, 8)); make('spring_out', 64, 64, box(0xff6b6b, 8))
+  make('block_coin', 64, 64, box(0xffb02e, 8)); make('block_coin_active', 64, 64, box(0xb88a4a, 8))
+  make('flag_off', 64, 64, box(0xdddddd, 4)); make('flag_green_a', 64, 64, box(0x3fb56b, 4)); make('flag_green_b', 64, 64, box(0x3fb56b, 4))
+  make('hud_heart', 48, 48, (g) => { g.fillStyle(0xff4d6d); g.fillCircle(16, 18, 12); g.fillCircle(32, 18, 12); g.fillTriangle(5, 22, 43, 22, 24, 44) })
+  make('hud_heart_empty', 48, 48, (g) => { g.lineStyle(4, 0xff4d6d); g.strokeCircle(24, 24, 16) })
+  make('hud_coin', 48, 48, (g) => { g.fillStyle(0xffc83d); g.fillCircle(24, 24, 16) })
+}
+
+const palette = () => ({ ink: '#23304a', accent: '#ff8a3d', panel: '#ffffffe0', sky: '#c4e3ff', ...studio.style.palette })
+const font = () => studio.style.font ? `"${studio.style.font}", system-ui, sans-serif` : 'system-ui, sans-serif'
+const hex = (c) => Phaser.Display.Color.HexStringToColor(String(c).slice(0, 7)).color
+const tile = (col, row) => CONFIG.level[row]?.[col] || ' '
+
+class Level extends Phaser.Scene {
+  constructor() { super('level') }
+  preload() { studio.preloadPhaser(this) }
+
+  create() {
+    fallbacks(this)
+    const rows = CONFIG.level.length
+    const cols = Math.max(...CONFIG.level.map((r) => r.length))
+    this.worldW = cols * T
+    this.worldH = rows * T
+    this.physics.world.setBounds(0, 0, this.worldW, this.worldH + 400)
+    this.physics.world.gravity.y = CONFIG.gravity
+    this.cameras.main.setBackgroundColor(palette().sky)
+
+    // Parallax scenery sits on the horizon behind the level and scrolls slower.
+    // The horizon is the main ground line: the first row that is mostly ground.
+    const mainRow = CONFIG.level.findIndex((row) => (row.match(/#/g) || []).length > cols * 0.4)
+    this.groundY = (mainRow < 0 ? rows - 1 : mainRow) * T
+    this.layers = []
+    const layer = (key, factor, scale, bottom) => {
+      if (!this.textures.exists(key)) return
+      const src = this.textures.get(key).getSourceImage()
+      const h = src.height * scale
+      const sprite = this.add.tileSprite(-T * 4, bottom - h, 10, h, key).setOrigin(0).setScrollFactor(factor, 1).setDepth(-10 + factor)
+      sprite.setTileScale(scale)
+      this.layers.push({ sprite, factor })
+    }
+    // The kit's backgrounds are stacking slices: hills on the horizon, clouds
+    // directly above them (they meet on white), then plain sky color.
+    const scale = 1.8
+    const hillsBottom = this.groundY + T * 0.6
+    layer(CONFIG.backdrop, 0.3, scale, hillsBottom)
+    layer('background_clouds', 0.15, scale, hillsBottom - 256 * scale + 14)
+
+    this.solids = this.physics.add.staticGroup()
+    this.oneWay = this.physics.add.staticGroup()
+    this.pickups = this.physics.add.staticGroup()
+    this.hazards = this.physics.add.staticGroup()
+    this.springs = this.physics.add.staticGroup()
+    this.bumpers = this.physics.add.staticGroup()
+    this.enemies = this.physics.add.group({ allowGravity: true })
+    this.bees = this.physics.add.group({ allowGravity: false })
+    let start = { x: T, y: T * 4 }
+
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const ch = tile(c, r)
+        const x = c * T + T / 2
+        const y = r * T + T / 2
+        if (ch === '#') {
+          const top = tile(c, r - 1) !== '#'
+          const left = tile(c - 1, r) !== '#'
+          const right = tile(c + 1, r) !== '#'
+          const part = top ? (left && right ? 'block' : left ? 'block_top_left' : right ? 'block_top_right' : 'block_top')
+            : left ? 'block_left' : right ? 'block_right' : 'block_center'
+          this.solids.create(x, y, terrain(part))
+        } else if (ch === '=') {
+          const left = tile(c - 1, r) !== '='
+          const right = tile(c + 1, r) !== '='
+          const piece = this.oneWay.create(x, y, terrain(left && right ? 'cloud' : left ? 'cloud_left' : right ? 'cloud_right' : 'cloud_middle'))
+          piece.body.checkCollision.down = piece.body.checkCollision.left = piece.body.checkCollision.right = false
+        } else if (ch === 'o' || ch === 'g') {
+          const item = this.pickups.create(x, y, ch === 'o' ? 'coin_gold' : 'gem_blue')
+          item.value = ch === 'o' ? 1 : 5
+          this.tweens.add({ targets: item, y: y - 6, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.inOut', delay: (c * 97) % 700 })
+        } else if (ch === '^') {
+          const spike = this.hazards.create(x, y, 'spikes')
+          spike.body.setSize(T * 0.8, T * 0.4).setOffset(T * 0.1, T * 0.6)
+        } else if (ch === 'S') {
+          this.springs.create(x, y, 'spring').body.setSize(T * 0.8, T * 0.5).setOffset(T * 0.1, T * 0.5)
+        } else if (ch === '?') {
+          this.bumpers.create(x, y, 'block_coin').used = false
+        } else if (ch === 's' || ch === 'n') {
+          const kind = ch === 's' ? 'slime_normal' : 'snail'
+          const enemy = this.enemies.create(x, y, `${kind}_walk_a`)
+          enemy.kind = kind
+          enemy.setVelocityX(-CONFIG.enemySpeed[ch]).setBounceX(1)
+          enemy.body.setSize(48, 36).setOffset(8, 28)
+          enemy.play(`${kind}-walk`, true)
+        } else if (ch === 'b') {
+          const bee = this.bees.create(x, y, 'bee_a')
+          bee.kind = 'bee'
+          bee.body.setSize(44, 36)
+          this.tweens.add({ targets: bee, x: x + T * 3, duration: (T * 3 / CONFIG.enemySpeed.b) * 1000, yoyo: true, repeat: -1, ease: 'Sine.inOut', onYoyo: () => bee.setFlipX(false), onRepeat: () => bee.setFlipX(true) })
+          bee.setFlipX(true)
+          bee.play('bee-fly')
+        } else if (ch === 'F') {
+          this.flag = this.physics.add.staticImage(x, y, 'flag_off')
+        } else if (ch === 'P') {
+          start = { x, y }
+        }
+      }
+    }
+    this.start = start
+
+    if (!this.anims.exists('walk')) this.anims.create({ key: 'walk', frames: [{ key: `${P}_walk_a` }, { key: `${P}_walk_b` }], frameRate: 9, repeat: -1 })
+    this.player = this.physics.add.sprite(start.x, start.y, `${P}_idle`)
+    this.player.body.setSize(52, 76).setOffset(22, 20)
+    this.player.setMaxVelocity(CONFIG.runSpeed * 1.2, CONFIG.springSpeed * 1.3)
+
+    this.physics.add.collider(this.player, this.solids)
+    this.physics.add.collider(this.player, this.oneWay)
+    this.physics.add.collider(this.player, this.bumpers, (p, block) => this.bump(p, block))
+    this.physics.add.collider(this.enemies, this.solids)
+    this.physics.add.collider(this.enemies, this.oneWay)
+    this.physics.add.overlap(this.player, this.pickups, (p, item) => this.collect(item))
+    this.physics.add.overlap(this.player, this.hazards, () => this.hurt())
+    this.physics.add.overlap(this.player, this.springs, (p, spring) => this.boing(spring))
+    this.physics.add.overlap(this.player, this.enemies, (p, e) => this.meet(e))
+    this.physics.add.overlap(this.player, this.bees, (p, e) => this.meet(e))
+    if (this.flag) this.physics.add.overlap(this.player, this.flag, () => this.finish())
+
+    const cam = this.cameras.main
+    cam.startFollow(this.player, true, 0.12, 0.12, 0, T)
+    this.fit()
+    this.scale.on('resize', this.fit, this)
+    this.events.once('shutdown', () => this.scale.off('resize', this.fit, this))
+
+    this.state = { coins: 0, gems: 0, lives: CONFIG.lives, started: false, over: false, t0: 0 }
+    this.lastGround = 0
+    this.jumpQueued = -Infinity
+    this.invulnerableUntil = 0
+    this.offJump = studio.onPress('a', () => { this.jumpQueued = this.time.now })
+    this.events.once('shutdown', () => this.offJump())
+    this.physics.pause()
+    this.scene.launch('hud', { level: this })
+  }
+
+  // Show about nine tiles across on phones and more on wider screens; the
+  // camera may look above the level so tall screens get open sky, not a void.
+  fit() {
+    const { width, height } = this.scale
+    const zoom = Phaser.Math.Clamp(Math.min(width / (T * 8.5), height / (T * 9)), 0.4, 1.1)
+    const cam = this.cameras.main
+    cam.setZoom(zoom)
+    const viewH = height / zoom
+    const top = Math.min(0, this.worldH - viewH)
+    cam.setBounds(0, top, this.worldW, this.worldH - top)
+    for (const { sprite, factor } of this.layers) sprite.setSize(width / zoom + this.worldW * factor + T * 8, sprite.height)
+  }
+
+  begin() {
+    if (this.state.started) return
+    this.state.started = true
+    this.state.t0 = this.time.now
+    this.physics.resume()
+    studio.sound('select', [null, null, 520, 0.01, 0.05, 0.1])
+  }
+
+  update(time) {
+    if (!this.state.started || this.state.over) return
+
+    const p = this.player
+    const onGround = p.body.blocked.down || p.body.touching.down
+    if (onGround) this.lastGround = time
+    const dir = Math.abs(studio.input.x) > 0.2 ? Math.sign(studio.input.x) : 0
+    const target = dir * CONFIG.runSpeed * Math.min(1, Math.abs(studio.input.x) * 1.4)
+    p.setVelocityX(Phaser.Math.Linear(p.body.velocity.x, target, onGround ? 0.35 : 0.15))
+    if (dir) p.setFlipX(dir < 0)
+
+    const canJump = time - this.lastGround < CONFIG.coyoteMs
+    if (time - this.jumpQueued < CONFIG.bufferMs && canJump) {
+      p.setVelocityY(-CONFIG.jumpSpeed)
+      this.jumpQueued = -Infinity
+      this.lastGround = -Infinity
+      studio.sound('jump', [null, null, 150, 0.03, 0.05, 0.18, null, 1.4, 12])
+    }
+    // Releasing jump early makes a shorter hop.
+    if (!studio.input.a && p.body.velocity.y < -CONFIG.jumpSpeed * 0.45) p.setVelocityY(-CONFIG.jumpSpeed * 0.45)
+
+    const hurt = time < this.invulnerableUntil
+    if (hurt) p.setTexture(`${P}_hit`).anims.stop()
+    else if (!onGround) p.setTexture(`${P}_jump`).anims.stop()
+    else if (Math.abs(p.body.velocity.x) > 30) p.play('walk', true)
+    else p.setTexture(`${P}_idle`).anims.stop()
+    p.setAlpha(hurt && Math.floor(time / 90) % 2 ? 0.5 : 1)
+
+    for (const e of this.enemies.getChildren()) {
+      if (!e.active || e.squashed) continue
+      // Turn around at ledges and walls.
+      const ahead = Math.floor((e.x + Math.sign(e.body.velocity.x || -1) * 34) / T)
+      const below = Math.floor((e.y + 40) / T)
+      if (tile(ahead, below) !== '#' && tile(ahead, below) !== '=' || e.body.blocked.left || e.body.blocked.right) {
+        e.setVelocityX(-(e.body.velocity.x || -1) * 1)
+        if (Math.abs(e.body.velocity.x) < 10) e.setVelocityX(CONFIG.enemySpeed.s)
+      }
+      e.setFlipX(e.body.velocity.x > 0)
+    }
+
+    if (p.y > this.worldH + 120) this.hurt(true)
+    this.events.emit('hud')
+  }
+
+  collect(item) {
+    this.state.coins += item.value === 1 ? 1 : 0
+    this.state.gems += item.value > 1 ? 1 : 0
+    studio.sound(item.value > 1 ? 'gem' : 'coin', [null, null, 1675, null, 0.06, 0.24, 1, 1.82, null, null, 837, 0.06])
+    this.sparkle(item.x, item.y, item.value > 1 ? 0x3fa9ff : 0xffc83d)
+    item.destroy()
+  }
+
+  bump(player, block) {
+    if (block.used || !player.body.blocked.up) return
+    block.used = true
+    block.setTexture('block_coin_active')
+    this.tweens.add({ targets: block, y: block.y - 12, duration: 80, yoyo: true })
+    const coin = this.add.image(block.x, block.y - T * 0.7, 'coin_gold')
+    this.tweens.add({ targets: coin, y: coin.y - T, alpha: 0, duration: 420, onComplete: () => coin.destroy() })
+    this.state.coins += 3
+    studio.sound('bump', [null, null, 220, 0.01, 0.04, 0.08, 1])
+    studio.sound('coin')
+  }
+
+  boing(spring) {
+    if (this.player.body.velocity.y < 0) return
+    this.player.setVelocityY(-CONFIG.springSpeed)
+    spring.setTexture('spring_out')
+    this.time.delayedCall(250, () => spring.setTexture('spring'))
+    studio.sound('jump_high', [null, null, 300, 0.02, 0.1, 0.3, null, 1.8, 30])
+  }
+
+  meet(enemy) {
+    if (enemy.squashed || this.state.over) return
+    const p = this.player
+    const stomp = p.body.velocity.y > 60 && p.body.bottom < enemy.body.center.y
+    if (stomp) {
+      enemy.squashed = true
+      enemy.body.enable = false
+      enemy.anims.stop()
+      if (enemy.kind === 'slime_normal') enemy.setTexture('slime_normal_flat')
+      else if (enemy.kind === 'snail') enemy.setTexture('snail_shell')
+      this.tweens.add({ targets: enemy, alpha: 0, y: enemy.y + 8, delay: 350, duration: 300, onComplete: () => enemy.destroy() })
+      p.setVelocityY(-CONFIG.jumpSpeed * 0.65)
+      this.state.coins += 2
+      studio.sound('disappear', [null, null, 520, 0.02, 0.05, 0.1, 2, 0.5])
+      this.cameras.main.shake(80, 0.004)
+    } else {
+      this.hurt()
+    }
+  }
+
+  hurt(fell = false) {
+    if (this.state.over || (!fell && this.time.now < this.invulnerableUntil)) return
+    this.state.lives -= 1
+    studio.sound('hurt', [null, null, 90, null, 0.01, 0.12, 4, 2.2])
+    this.cameras.main.shake(180, 0.01)
+    if (this.state.lives <= 0) return this.end(false)
+    this.invulnerableUntil = this.time.now + 1300
+    if (fell) {
+      this.player.setPosition(this.start.x, this.start.y).setVelocity(0, 0)
+    } else {
+      this.player.setVelocity(this.player.flipX ? 260 : -260, -420)
+    }
+  }
+
+  finish() {
+    if (this.state.over) return
+    this.flag.setTexture('flag_green_a')
+    this.tweens.add({ targets: this.flag, scaleX: 0.9, duration: 250, yoyo: true, repeat: -1 })
+    this.end(true)
+  }
+
+  end(won) {
+    this.state.over = true
+    this.state.won = won
+    this.state.time = (this.time.now - this.state.t0) / 1000
+    this.physics.pause()
+    if (won) {
+      const score = this.state.coins + this.state.gems * 5
+      this.state.best = Math.max(score, studio.load('best') || 0)
+      studio.save('best', this.state.best)
+      studio.sound('magic', [null, null, 300, 0.04, 0.12, 0.35, null, 1.3, null, null, 420, 0.06, 0.1])
+      this.player.setTexture(`${P}_front`)
+    }
+    this.events.emit('hud')
+    this.events.emit('ended', won)
+  }
+
+  sparkle(x, y, color) {
+    for (let i = 0; i < 8; i++) {
+      const dot = this.add.circle(x, y, 5, color)
+      const a = (i / 8) * Math.PI * 2
+      this.tweens.add({ targets: dot, x: x + Math.cos(a) * 42, y: y + Math.sin(a) * 42, alpha: 0, scale: 0.3, duration: 380, onComplete: () => dot.destroy() })
+    }
+  }
+}
+
+// The HUD lives in its own unzoomed scene so it stays crisp and fixed.
+class Hud extends Phaser.Scene {
+  constructor() { super('hud') }
+  init(data) { this.level = data.level }
+
+  async create() {
+    await studio.fontReady
+    const pal = palette()
+    const text = (x, y, s, size, color = pal.ink, bold = true) => this.add.text(x, y, s, { fontFamily: font(), fontSize: size + 'px', fontStyle: bold ? '700' : '400', color }).setOrigin(0.5)
+
+    this.bar = this.add.graphics()
+    this.hearts = Array.from({ length: CONFIG.lives }, (_, i) => this.add.image(0, 0, 'hud_heart').setDisplaySize(34, 34))
+    this.coinIcon = this.add.image(0, 0, 'hud_coin').setDisplaySize(32, 32)
+    this.coinText = this.add.text(0, 0, '0', { fontFamily: font(), fontSize: '26px', fontStyle: '700', color: pal.ink }).setOrigin(0, 0.5)
+
+    this.panel = this.add.container(0, 0)
+    this.panelBg = this.add.graphics()
+    this.titleText = text(0, -70, CONFIG.title, 46, pal.ink)
+    this.subText = text(0, -8, 'Run, jump and reach the flag!', 20, pal.ink, false)
+    this.button = this.add.graphics()
+    this.buttonText = text(0, 64, 'Tap to start', 24, '#ffffff')
+    this.panel.add([this.panelBg, this.titleText, this.subText, this.button, this.buttonText])
+    this.tweens.add({ targets: this.buttonText, scale: 1.06, duration: 600, yoyo: true, repeat: -1 })
+
+    this.layout()
+    this.scale.on('resize', this.layout, this)
+    this.events.once('shutdown', () => this.scale.off('resize', this.layout, this))
+    this.level.events.on('hud', this.refresh, this)
+    this.level.events.on('ended', this.showEnd, this)
+    this.input.on('pointerdown', () => this.go())
+    this.offA = studio.onPress('a', () => this.go())
+    this.events.once('shutdown', () => this.offA())
+    this.refresh()
+  }
+
+  go() {
+    const s = this.level.state
+    if (!s.started) {
+      this.panel.setVisible(false)
+      this.level.begin()
+      studio.say('Go, go, go!', { voice: 'hero' })
+    } else if (s.over) {
+      this.scene.stop()
+      this.level.scene.restart()
+    }
+  }
+
+  // The HUD is drawn for a ~420x680 screen and scaled to fit smaller ones.
+  layout() {
+    const ui = Phaser.Math.Clamp(Math.min(this.scale.width / 420, this.scale.height / 680), 0.6, 1.15)
+    this.cameras.main.setOrigin(0, 0).setZoom(ui)
+    const width = this.scale.width / ui
+    const height = this.scale.height / ui
+    const pal = palette()
+    const top = 12
+    this.bar.clear().fillStyle(hex(pal.panel), 0.92).fillRoundedRect(12, top, Math.min(width - 24, 360), 54, 18)
+    this.hearts.forEach((h, i) => h.setPosition(40 + i * 40, top + 27))
+    this.coinIcon.setPosition(40 + CONFIG.lives * 40 + 20, top + 27)
+    this.coinText.setPosition(40 + CONFIG.lives * 40 + 42, top + 28)
+    this.panel.setPosition(width / 2, height / 2)
+    const w = Math.min(width - 40, 420)
+    this.panelBg.clear().fillStyle(hex(pal.panel), 0.95).fillRoundedRect(-w / 2, -130, w, 250, 28)
+    this.button.clear().fillStyle(hex(pal.accent), 1).fillRoundedRect(-120, 36, 240, 56, 28)
+  }
+
+  refresh() {
+    const s = this.level.state
+    this.hearts.forEach((h, i) => h.setTexture(i < s.lives ? 'hud_heart' : (this.textures.exists('hud_heart_empty') ? 'hud_heart_empty' : 'hud_heart')).setAlpha(i < s.lives ? 1 : 0.35))
+    this.coinText.setText(String(s.coins + s.gems * 5))
+  }
+
+  showEnd(won) {
+    const s = this.level.state
+    this.titleText.setText(won ? 'Level clear!' : 'Game over')
+    this.subText.setText(won ? `Score ${s.coins + s.gems * 5}  ·  Best ${s.best}  ·  ${s.time.toFixed(1)} s` : 'The meadow was tough this time.')
+    this.buttonText.setText('Play again')
+    this.time.delayedCall(won ? 900 : 500, () => this.panel.setVisible(true))
+    studio.say(won ? 'Level clear! Nice run.' : 'Oof. Try again!', { voice: won ? 'hero' : 'narrator' })
+  }
+}
+
+// Walking animations are created once the art has loaded.
+class Boot extends Phaser.Scene {
+  constructor() { super('boot') }
+  preload() { studio.preloadPhaser(this) }
+  create() {
+    fallbacks(this)
+    const anim = (key, frames, rate) => { if (!this.anims.exists(key) && frames.every((f) => this.textures.exists(f))) this.anims.create({ key, frames: frames.map((f) => ({ key: f })), frameRate: rate, repeat: -1 }) }
+    anim('slime_normal-walk', ['slime_normal_walk_a', 'slime_normal_walk_b'], 5)
+    anim('snail-walk', ['snail_walk_a', 'snail_walk_b'], 3)
+    anim('bee-fly', ['bee_a', 'bee_b'], 10)
+    this.scene.start('level')
+  }
+}
+
+studio.controls({ stick: true, buttons: ['Jump'] })
+
+new Phaser.Game({
+  type: Phaser.AUTO,
+  backgroundColor: '#c4e3ff',
+  scale: { mode: Phaser.Scale.RESIZE, width: window.innerWidth, height: window.innerHeight },
+  physics: { default: 'arcade', arcade: { debug: false } },
+  scene: [Boot, Level, Hud],
+})
+</script>
+</body>
+</html>

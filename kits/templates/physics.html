@@ -1,0 +1,455 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Boulder Buster</title>
+<style>html,body{margin:0;height:100%;overflow:hidden;background:#d8f0ff;touch-action:none}</style>
+</head>
+<body>
+<script type="module">
+import Phaser from 'https://esm.sh/phaser@3.90.0'
+
+// Pieces: m = material (wood | stone | glass | tnt), p = piece
+// (block 70x70, short 140x70, plank 220x70, pillar 70x140, beam 70x220, big 140x140, ball, tri),
+// x = distance from the level's anchor, y = height of the piece's center above the ground,
+// a = angle in degrees. Aliens: { alien: 'green_round', x, y }.
+const CONFIG = {
+  title: 'Boulder Buster',
+  backdrop: 'colored_grass',        // colored_grass | colored_desert | colored_land
+  groundTile: 'grass',              // grass | sand | snow
+  shots: 4,
+  power: 0.19,                      // launch speed per pixel of pull
+  maxPull: 150,
+  strength: { glass: 10, wood: 26, stone: 55, tnt: 8, alien: 9 },
+  levels: [
+    {
+      anchor: 1180,
+      pieces: [
+        { m: 'wood', p: 'pillar', x: -80, y: 70 }, { m: 'wood', p: 'pillar', x: 80, y: 70 },
+        { m: 'wood', p: 'plank', x: 0, y: 175 },
+        { m: 'glass', p: 'block', x: -70, y: 245 }, { m: 'glass', p: 'block', x: 70, y: 245 },
+        { m: 'wood', p: 'tri', x: 0, y: 315 },
+      ],
+      aliens: [{ alien: 'green_round', x: 0, y: 35 }, { alien: 'pink_square', x: 0, y: 245 }],
+    },
+    {
+      anchor: 1220,
+      pieces: [
+        { m: 'stone', p: 'pillar', x: -150, y: 70 }, { m: 'glass', p: 'pillar', x: -30, y: 70 },
+        { m: 'stone', p: 'plank', x: -90, y: 175 },
+        { m: 'wood', p: 'beam', x: 90, y: 110 }, { m: 'wood', p: 'beam', x: 190, y: 110 },
+        { m: 'wood', p: 'plank', x: 140, y: 255 },
+        { m: 'glass', p: 'short', x: -90, y: 245 }, { m: 'tnt', p: 'block', x: 140, y: 35 },
+      ],
+      aliens: [{ alien: 'blue_suit', x: -90, y: 35 }, { alien: 'yellow_round', x: 140, y: 325 }, { alien: 'green_square', x: -90, y: 315 }],
+    },
+    {
+      anchor: 1250,
+      pieces: [
+        { m: 'stone', p: 'big', x: -170, y: 70 }, { m: 'stone', p: 'big', x: 170, y: 70 },
+        { m: 'wood', p: 'plank', x: -60, y: 175 }, { m: 'wood', p: 'plank', x: 60, y: 175 },
+        { m: 'glass', p: 'pillar', x: -110, y: 280 }, { m: 'glass', p: 'pillar', x: 110, y: 280 },
+        { m: 'stone', p: 'plank', x: 0, y: 385 }, { m: 'tnt', p: 'block', x: 0, y: 35 },
+        { m: 'wood', p: 'tri', x: 0, y: 455 },
+      ],
+      aliens: [{ alien: 'pink_round', x: -170, y: 175 }, { alien: 'beige_suit', x: 0, y: 245 }, { alien: 'blue_round', x: 170, y: 175 }, { alien: 'green_suit', x: 0, y: 455 }],
+    },
+  ],
+}
+
+const WORLD_W = 1700
+const WORLD_H = 1000
+const GROUND = 860
+const SLING = { x: 240, y: GROUND - 150 }
+const SIZES = { block: [70, 70], short: [140, 70], plank: [220, 70], pillar: [70, 140], beam: [70, 220], big: [140, 140], ball: [70, 70], tri: [140, 70] }
+const COLORS = { wood: 0xc98b4a, stone: 0x9aa7ad, glass: 0xbfeaff, tnt: 0xffc21a }
+
+const palette = () => ({ ink: '#3b2a1a', accent: '#ff6b3d', panel: '#fff6e6f0', sky: '#d8f0ff', ...studio.style.palette })
+const font = () => studio.style.font ? `"${studio.style.font}", system-ui, sans-serif` : 'system-ui, sans-serif'
+const hex = (c) => Phaser.Display.Color.HexStringToColor(String(c).slice(0, 7)).color
+const key = (m, p, dmg = false) => `${m}_${p}${dmg ? '_dmg' : ''}`
+
+// Simple shapes stand in for any art that is not installed.
+function fallbacks(scene) {
+  const make = (k, w, h, draw) => {
+    if (scene.textures.exists(k)) return
+    const g = scene.make.graphics({ x: 0, y: 0 }, false)
+    draw(g, w, h)
+    g.generateTexture(k, w, h)
+    g.destroy()
+  }
+  for (const [m, color] of Object.entries(COLORS)) {
+    for (const [p, [w, h]] of Object.entries(SIZES)) {
+      for (const dmg of [false, true]) {
+        make(key(m, p, dmg), w, h, (g) => {
+          g.fillStyle(color, dmg ? 0.75 : 1)
+          if (p === 'ball') g.fillCircle(w / 2, h / 2, w / 2 - 2)
+          else if (p === 'tri') g.fillTriangle(0, h, w / 2, 0, w, h)
+          else g.fillRoundedRect(2, 2, w - 4, h - 4, 8)
+          g.lineStyle(3, 0x000000, 0.25).strokeRoundedRect(2, 2, w - 4, h - 4, 8)
+        })
+      }
+    }
+  }
+  for (const c of ['green', 'pink', 'blue', 'yellow', 'beige']) {
+    for (const s of ['round', 'square', 'suit']) make(`alien_${c}_${s}`, 70, 70, (g) => { g.fillStyle(0x7ed957); g.fillCircle(35, 35, 32); g.fillStyle(0x222222); g.fillCircle(26, 30, 5); g.fillCircle(44, 30, 5) })
+  }
+  make(CONFIG.groundTile, 70, 70, (g) => { g.fillStyle(0x8b5a3c); g.fillRect(0, 0, 70, 70); g.fillStyle(0x5fbf4a); g.fillRect(0, 0, 70, 16) })
+  make('dirt', 70, 70, (g) => { g.fillStyle(0x8b5a3c); g.fillRect(0, 0, 70, 70) })
+  for (const s of ['stargold', 'starsilver', 'starbronze']) make(s, 70, 70, (g) => { g.fillStyle(0xffc83d); g.fillCircle(35, 35, 28) })
+}
+
+class Game extends Phaser.Scene {
+  constructor() { super('game') }
+  init(data) { this.levelIndex = data?.level || 0 }
+  preload() { studio.preloadPhaser(this) }
+
+  create() {
+    fallbacks(this)
+    this.level = CONFIG.levels[this.levelIndex]
+    this.cameras.main.setBackgroundColor(palette().sky)
+    // The backdrop is a full scene (sky on top, hills below): repeat it along
+    // the horizon, slower than the level, and match the open sky to its top.
+    if (this.textures.exists(CONFIG.backdrop)) {
+      const src = this.textures.get(CONFIG.backdrop).getSourceImage()
+      const scale = 1.15
+      const h = src.height * scale
+      this.add.tileSprite(-1500, GROUND + 60 - h, WORLD_W + 3000, h, CONFIG.backdrop).setOrigin(0).setTileScale(scale).setScrollFactor(0.35, 1).setDepth(-10)
+      const top = this.textures.getPixel(4, 4, CONFIG.backdrop)
+      if (top) this.cameras.main.setBackgroundColor(top)
+    }
+    // Ground: a row of surface tiles over dirt, with one static physics body.
+    for (let x = -350; x < WORLD_W + 350; x += 70) {
+      this.add.image(x, GROUND + 35, CONFIG.groundTile)
+      for (let y = GROUND + 105; y < WORLD_H + 300; y += 70) this.add.image(x, y, 'dirt')
+    }
+    this.matter.world.setBounds(-400, -2000, WORLD_W + 800, GROUND + 2000, 64, true, true, false, true)
+    this.matter.add.rectangle(WORLD_W / 2, GROUND + 50, WORLD_W + 800, 100, { isStatic: true, label: 'ground', friction: 0.9 })
+
+    this.pieces = []
+    this.aliens = []
+    for (const spec of this.level.pieces) this.addPiece(spec)
+    for (const spec of this.level.aliens) this.addAlien(spec)
+
+    // The slingshot: two posts and a band that stretches while aiming.
+    const sling = this.add.graphics().setDepth(1)
+    const wood = 0x7a4a24
+    sling.fillStyle(wood).fillRoundedRect(SLING.x - 13, SLING.y + 20, 26, GROUND - SLING.y - 20, 8)
+    sling.lineStyle(20, wood).beginPath().moveTo(SLING.x, SLING.y + 34).lineTo(SLING.x - 30, SLING.y - 34).strokePath()
+    sling.beginPath().moveTo(SLING.x, SLING.y + 34).lineTo(SLING.x + 30, SLING.y - 34).strokePath()
+    sling.fillStyle(0x5a3416).fillCircle(SLING.x - 30, SLING.y - 34, 11).fillCircle(SLING.x + 30, SLING.y - 34, 11)
+    this.band = this.add.graphics().setDepth(3)
+    this.dots = this.add.graphics().setDepth(4)
+
+    this.state = { shots: CONFIG.shots, score: 0, started: false, over: false, aiming: false }
+    this.settleUntil = this.time.now + 1500
+    this.matter.world.on('collisionstart', (event) => this.onCollide(event))
+    this.input.on('pointerdown', (p) => this.startAim(p))
+    this.input.on('pointermove', (p) => this.moveAim(p))
+    this.input.on('pointerup', () => this.release())
+
+    const cam = this.cameras.main
+    cam.setBounds(-200, -1400, WORLD_W + 400, WORLD_H + 1400)
+    this.fit()
+    this.scale.on('resize', this.fit, this)
+    this.events.once('shutdown', () => this.scale.off('resize', this.fit, this))
+    cam.centerOn(this.level.anchor, GROUND - 260)
+    this.scene.launch('hud', { game: this })
+  }
+
+  fit() {
+    const { width, height } = this.scale
+    // Landscape screens fit the slingshot and the tower together; tall phones
+    // pan between them.
+    const span = width > height * 1.2 ? 1500 : 1150
+    this.cameras.main.setZoom(Phaser.Math.Clamp(Math.min(width / span, height / 780), 0.32, 1))
+  }
+
+  addPiece({ m, p, x, y, a = 0 }) {
+    const [w, h] = SIZES[p]
+    const options = { restitution: 0.05, friction: 0.8, density: m === 'stone' ? 0.004 : m === 'glass' ? 0.0015 : 0.002, label: 'piece' }
+    if (p === 'ball') options.shape = { type: 'circle', radius: w / 2 }
+    if (p === 'tri') options.shape = { type: 'fromVerts', verts: `0 ${h} ${w / 2} 0 ${w} ${h}` }
+    const img = this.matter.add.image(this.level.anchor + x, GROUND - y, key(m, p), null, options)
+    img.setAngle(a)
+    img.setData({ m, p, hp: CONFIG.strength[m] })
+    this.pieces.push(img)
+  }
+
+  addAlien({ alien, x, y }) {
+    const img = this.matter.add.image(this.level.anchor + x, GROUND - y, `alien_${alien}`, null, { shape: { type: 'circle', radius: 32 }, restitution: 0.2, density: 0.0015, label: 'alien' })
+    img.setData({ hp: CONFIG.strength.alien, alien: true })
+    this.aliens.push(img)
+  }
+
+  begin() {
+    this.state.started = true
+    this.time.delayedCall(300, () => this.loadBoulder())
+  }
+
+  loadBoulder() {
+    if (this.state.shots <= 0 || this.state.over) return
+    this.boulder = this.matter.add.image(SLING.x, SLING.y, key('stone', 'ball'), null, { shape: { type: 'circle', radius: 33 }, density: 0.012, restitution: 0.25, friction: 0.6, label: 'boulder' })
+    this.boulder.setStatic(true).setDepth(2)
+    this.cameras.main.stopFollow()
+    this.cameras.main.pan((SLING.x + this.level.anchor) / 2, GROUND - 260, 500, 'Sine.easeInOut')
+  }
+
+  // Drag anywhere: the pull is how far the finger moved, so small screens
+  // never run out of room behind the slingshot.
+  startAim(p) {
+    if (!this.boulder || !this.boulder.isStatic() || this.state.over || !this.state.started) return
+    this.state.aiming = true
+    this.aimStart = { x: p.x, y: p.y }
+  }
+
+  moveAim(p) {
+    if (!this.state.aiming) return
+    const zoom = this.cameras.main.zoom
+    const pull = new Phaser.Math.Vector2((p.x - this.aimStart.x) / zoom * 0.7, (p.y - this.aimStart.y) / zoom * 0.7).limit(CONFIG.maxPull)
+    this.boulder.setPosition(SLING.x + pull.x, SLING.y + pull.y)
+    this.drawAim(pull)
+  }
+
+  drawAim(pull) {
+    this.band.clear().lineStyle(8, 0x5a3a1e, 1)
+    this.band.lineBetween(SLING.x - 30, SLING.y - 34, this.boulder.x, this.boulder.y)
+    this.band.lineBetween(SLING.x + 30, SLING.y - 34, this.boulder.x, this.boulder.y)
+    // Preview the flight with the same gravity and air drag Matter applies.
+    this.dots.clear().fillStyle(0xffffff, 0.9)
+    let x = this.boulder.x
+    let y = this.boulder.y
+    let vx = -pull.x * CONFIG.power
+    let vy = -pull.y * CONFIG.power
+    const g = this.matter.world.engine.gravity.y * this.matter.world.engine.gravity.scale * 16.67 * 16.67
+    for (let i = 0; i < 60; i++) {
+      vx *= 0.99; vy = vy * 0.99 + g; x += vx; y += vy
+      if (i % 3 === 0) this.dots.fillCircle(x, y, Math.max(2, 6 - i * 0.08))
+      if (y > GROUND) break
+    }
+  }
+
+  release() {
+    if (!this.state.aiming) return
+    this.state.aiming = false
+    const pull = new Phaser.Math.Vector2(this.boulder.x - SLING.x, this.boulder.y - SLING.y)
+    this.band.clear()
+    this.dots.clear()
+    if (pull.length() < 20) { this.boulder.setPosition(SLING.x, SLING.y); return }
+    this.boulder.setStatic(false)
+    // A body that was static can come back asleep, which ignores velocity.
+    this.boulder.setAwake()
+    this.boulder.setVelocity(-pull.x * CONFIG.power, -pull.y * CONFIG.power)
+    this.boulder.setAngularVelocity(0.1)
+    this.state.shots -= 1
+    this.settleUntil = 0
+    studio.sound('throw', [null, null, 300, 0.02, 0.05, 0.15, 2, 0.4])
+    this.cameras.main.startFollow(this.boulder, true, 0.08, 0.08)
+    this.events.emit('hud')
+    const flying = this.boulder
+    this.time.delayedCall(5200, () => this.afterShot(flying))
+  }
+
+  afterShot(flying) {
+    if (this.state.over) return
+    this.cameras.main.stopFollow()
+    if (flying.active) this.tweens.add({ targets: flying, alpha: 0, duration: 400, onComplete: () => flying.destroy() })
+    if (this.aliens.length === 0) return this.end(true)
+    if (this.state.shots <= 0) return this.end(false)
+    this.loadBoulder()
+  }
+
+  onCollide(event) {
+    if (this.time.now < this.settleUntil) return
+    for (const pair of event.pairs) {
+      const { bodyA, bodyB } = pair
+      const speed = Math.hypot(bodyA.velocity.x - bodyB.velocity.x, bodyA.velocity.y - bodyB.velocity.y)
+      if (speed < 2.2) continue
+      for (const [body, other] of [[bodyA, bodyB], [bodyB, bodyA]]) {
+        const go = body.gameObject
+        if (!go?.active || go.getData('hp') === undefined) continue
+        const heft = other.label === 'boulder' ? 2.2 : other.label === 'ground' ? 1 : 0.8
+        this.damage(go, speed * heft)
+      }
+    }
+  }
+
+  damage(go, amount) {
+    const hp = go.getData('hp') - amount
+    go.setData('hp', hp)
+    if (go.getData('alien')) {
+      if (hp <= 0) this.pop(go)
+      return
+    }
+    const { m, p } = go.data.values
+    if (hp <= 0) return this.shatter(go)
+    if (hp < CONFIG.strength[m] * 0.5 && this.textures.exists(key(m, p, true))) go.setTexture(key(m, p, true))
+    if (amount > 4) studio.sound('bump', [null, null, 120, 0.01, 0.02, 0.06, 4])
+  }
+
+  shatter(go) {
+    const { m } = go.data.values
+    this.debris(go.x, go.y, m)
+    this.state.score += m === 'glass' ? 50 : m === 'wood' ? 80 : 120
+    this.pieces = this.pieces.filter((x) => x !== go)
+    go.destroy()
+    if (m === 'tnt') this.explode(go.x, go.y)
+    this.events.emit('hud')
+  }
+
+  explode(x, y) {
+    studio.sound('hurt', [null, null, 333, 0.01, 0, 0.9, 4, 1.9, null, null, null, null, null, 0.5, null, 0.6])
+    this.cameras.main.shake(350, 0.02)
+    const ring = this.add.circle(x, y, 20, 0xffc21a, 0.8).setDepth(5)
+    this.tweens.add({ targets: ring, radius: 220, alpha: 0, duration: 400, onUpdate: () => ring.setRadius(ring.radius), onComplete: () => ring.destroy() })
+    for (const go of [...this.pieces, ...this.aliens]) {
+      const d = Phaser.Math.Distance.Between(x, y, go.x, go.y)
+      if (d > 260 || !go.active) continue
+      const push = (260 - d) / 260
+      go.setVelocity((go.x - x) / d * 18 * push, -14 * push)
+      this.damage(go, 40 * push)
+    }
+  }
+
+  pop(alien) {
+    this.aliens = this.aliens.filter((a) => a !== alien)
+    this.state.score += 500
+    studio.sound('disappear', [null, null, 520, 0.02, 0.05, 0.1, 2, 0.5])
+    const label = this.add.text(alien.x, alien.y - 30, '+500', { fontFamily: font(), fontSize: '34px', color: '#ffffff', stroke: palette().ink, strokeThickness: 6 }).setOrigin(0.5).setDepth(6)
+    this.tweens.add({ targets: label, y: label.y - 70, alpha: 0, duration: 900, onComplete: () => label.destroy() })
+    this.debris(alien.x, alien.y, 'alien')
+    alien.destroy()
+    this.events.emit('hud')
+    if (this.aliens.length === 0) this.time.delayedCall(1200, () => this.end(true))
+  }
+
+  debris(x, y, m) {
+    const chip = { glass: 'debrisglass_1', wood: 'debriswood_1', stone: 'debrisstone_1' }[m]
+    for (let i = 0; i < 7; i++) {
+      const piece = chip && this.textures.exists(chip) ? this.add.image(x, y, chip.replace('_1', `_${1 + (i % 3)}`)) : this.add.circle(x, y, 7, m === 'alien' ? 0x7ed957 : COLORS[m] || 0xffffff)
+      piece.setDepth(5)
+      this.tweens.add({ targets: piece, x: x + Phaser.Math.Between(-90, 90), y: y + Phaser.Math.Between(-90, 30), angle: Phaser.Math.Between(-180, 180), alpha: 0, duration: 650, onComplete: () => piece.destroy() })
+    }
+  }
+
+  end(won) {
+    if (this.state.over) return
+    this.state.over = true
+    this.state.won = won
+    if (won) {
+      this.state.score += this.state.shots * 1000
+      this.state.stars = this.state.shots >= 2 ? 3 : this.state.shots === 1 ? 2 : 1
+      const best = studio.load('best') || {}
+      best[this.levelIndex] = Math.max(best[this.levelIndex] || 0, this.state.score)
+      studio.save('best', best)
+      this.state.best = best[this.levelIndex]
+      studio.sound('magic', [null, null, 300, 0.04, 0.12, 0.35, null, 1.3, null, null, 420, 0.06, 0.1])
+    }
+    this.events.emit('hud')
+    this.events.emit('ended', won)
+  }
+}
+
+// HUD in its own unzoomed scene, scaled from a ~420x680 design.
+class Hud extends Phaser.Scene {
+  constructor() { super('hud') }
+  init(data) { this.game_ = data.game }
+
+  async create() {
+    await studio.fontReady
+    const pal = palette()
+    const text = (x, y, s, size, color = pal.ink) => this.add.text(x, y, s, { fontFamily: font(), fontSize: size + 'px', color }).setOrigin(0.5)
+    this.bar = this.add.graphics()
+    this.levelText = this.add.text(0, 0, '', { fontFamily: font(), fontSize: '24px', color: pal.ink }).setOrigin(0, 0.5)
+    this.scoreText = this.add.text(0, 0, '', { fontFamily: font(), fontSize: '24px', color: pal.ink }).setOrigin(1, 0.5)
+    this.shotIcons = Array.from({ length: CONFIG.shots }, () => this.add.image(0, 0, key('stone', 'ball')).setDisplaySize(26, 26))
+
+    this.panel = this.add.container(0, 0)
+    this.panelBg = this.add.graphics()
+    this.titleText = text(0, -92, CONFIG.title, 44)
+    this.subText = text(0, -38, 'Drag back anywhere, then let go!', 20)
+    this.stars = [-70, 0, 70].map((x) => this.add.image(x, 18, 'stargold').setDisplaySize(56, 56).setVisible(false))
+    this.button = this.add.graphics()
+    this.buttonText = text(0, 88, 'Tap to start', 26, '#ffffff')
+    this.panel.add([this.panelBg, this.titleText, this.subText, ...this.stars, this.button, this.buttonText])
+
+    // A full-screen tap target while a panel is showing; created before
+    // layout() so it is sized to the screen.
+    this.hit = this.add.zone(0, 0, 10, 10).setOrigin(0.5).setInteractive()
+    this.hit.on('pointerdown', () => this.go())
+    this.layout()
+    this.scale.on('resize', this.layout, this)
+    this.events.once('shutdown', () => this.scale.off('resize', this.layout, this))
+    this.game_.events.on('hud', this.refresh, this)
+    this.game_.events.on('ended', this.showEnd, this)
+    this.offA = studio.onPress('a', () => { if (this.panel.visible) this.go() })
+    this.events.once('shutdown', () => this.offA())
+    this.refresh()
+  }
+
+  go() {
+    const g = this.game_
+    if (!g.state.started) {
+      this.panel.setVisible(false)
+      this.hit.disableInteractive()
+      g.begin()
+      studio.say('Knock down every alien!', { voice: 'hero' })
+      return
+    }
+    if (!g.state.over) return
+    const next = g.state.won && g.levelIndex < CONFIG.levels.length - 1 ? g.levelIndex + 1 : g.state.won ? 0 : g.levelIndex
+    this.scene.stop()
+    g.scene.restart({ level: next })
+  }
+
+  layout() {
+    const ui = Phaser.Math.Clamp(Math.min(this.scale.width / 420, this.scale.height / 680), 0.6, 1.15)
+    this.cameras.main.setOrigin(0, 0).setZoom(ui)
+    const width = this.scale.width / ui
+    const height = this.scale.height / ui
+    const pal = palette()
+    const barW = Math.min(width - 24, 420)
+    this.bar.clear().fillStyle(hex(pal.panel), 0.92).fillRoundedRect(12, 12, barW, 56, 18)
+    this.levelText.setPosition(28, 40)
+    this.scoreText.setPosition(12 + barW - 16, 40)
+    this.shotIcons.forEach((icon, i) => icon.setPosition(150 + i * 30, 40))
+    this.panel.setPosition(width / 2, height / 2)
+    const w = Math.min(width - 40, 420)
+    this.panelBg.clear().fillStyle(hex(pal.panel), 0.96).fillRoundedRect(-w / 2, -150, w, 290, 30)
+    this.button.clear().fillStyle(hex(pal.accent), 1).fillRoundedRect(-130, 60, 260, 58, 29)
+    this.hit.setPosition(width / 2, height / 2).setSize(width, height)
+    if (this.hit.input) this.hit.input.hitArea.setTo(0, 0, width, height)
+  }
+
+  refresh() {
+    const s = this.game_.state
+    this.levelText?.setText(`Level ${this.game_.levelIndex + 1}`)
+    this.scoreText?.setText(String(s.score))
+    this.shotIcons?.forEach((icon, i) => icon.setAlpha(i < s.shots ? 1 : 0.2))
+  }
+
+  showEnd(won) {
+    const s = this.game_.state
+    const last = this.game_.levelIndex >= CONFIG.levels.length - 1
+    this.titleText.setText(won ? (last ? 'You beat them all!' : 'Level clear!') : 'Out of boulders')
+    this.subText.setText(won ? `Score ${s.score}  ·  Best ${s.best}` : 'The aliens are laughing. Try again!')
+    this.stars.forEach((star, i) => star.setVisible(won).setAlpha(i < (s.stars || 0) ? 1 : 0.25))
+    this.buttonText.setText(won ? (last ? 'Play again' : 'Next level') : 'Retry')
+    this.time.delayedCall(700, () => { this.panel.setVisible(true); this.hit.setInteractive() })
+    studio.say(won ? 'Direct hit! Level clear.' : 'Out of boulders. Try again!', { voice: won ? 'hero' : 'narrator' })
+  }
+}
+
+studio.controls({ stick: false, buttons: [] })
+
+new Phaser.Game({
+  type: Phaser.AUTO,
+  backgroundColor: '#d8f0ff',
+  scale: { mode: Phaser.Scale.RESIZE, width: window.innerWidth, height: window.innerHeight },
+  physics: { default: 'matter', matter: { gravity: { y: 1 }, enableSleeping: true } },
+  scene: [Game, Hud],
+})
+</script>
+</body>
+</html>

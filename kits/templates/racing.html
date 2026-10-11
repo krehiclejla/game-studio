@@ -1,0 +1,431 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Grand Loop</title>
+<style>html,body{margin:0;height:100%;overflow:hidden;background:#2fae5b;touch-action:none}</style>
+</head>
+<body>
+<script type="module">
+import Phaser from 'https://esm.sh/phaser@3.90.0'
+
+// The track is drawn on a 128 px grid:
+//   -  |  straights       r  7  L  J  corners shaped like ┌ ┐ └ ┘
+//   F  start/finish on a horizontal straight (cars start here, driving west)
+//   o  tire stack   c  cone   t  tree   T  grandstand   .  grass
+const CONFIG = {
+  title: 'Grand Loop',
+  laps: 3,
+  playerCar: 'car_red_1',
+  rivals: [
+    { car: 'car_blue_1', skill: 0.93 },
+    { car: 'car_yellow_3', skill: 0.88 },
+    { car: 'car_green_1', skill: 0.84 },
+  ],
+  topSpeed: 480,        // px per second on asphalt
+  offroadSpeed: 210,
+  accel: 380,
+  brake: 700,
+  steer: 3.7,           // radians per second at full lock
+  grip: 8,              // higher = less drift
+  track: [
+    '.t....T....t',
+    '..r-----7...',
+    'o.|.....|.t.',
+    '..|.r---J...',
+    't.|.|....c..',
+    '..|.L----7..',
+    '.c|......|.t',
+    '..L-F----J..',
+    '.t....o...t.',
+  ],
+}
+
+const TILE = 128
+const LINKS = { '-': 'WE', '|': 'NS', r: 'SE', 7: 'SW', L: 'NE', J: 'NW', F: 'WE' }
+const ROAD_ART = { '-': 'road_h', '|': 'road_v', r: 'road_se', 7: 'road_sw', L: 'road_ne', J: 'road_nw', F: 'finish_h' }
+const STEP = { N: [0, -1], S: [0, 1], E: [1, 0], W: [-1, 0] }
+const OPPOSITE = { N: 'S', S: 'N', E: 'W', W: 'E' }
+
+const palette = () => ({ ink: '#1d2433', accent: '#ff5a36', panel: '#ffffffe6', sky: '#2fae5b', ...studio.style.palette })
+const font = () => studio.style.font ? `"${studio.style.font}", system-ui, sans-serif` : 'system-ui, sans-serif'
+const hex = (c) => Phaser.Display.Color.HexStringToColor(String(c).slice(0, 7)).color
+const cell = (c, r) => CONFIG.track[r]?.[c] || '.'
+const center = (c, r) => ({ x: c * TILE + TILE / 2, y: r * TILE + TILE / 2 })
+
+// Walk the loop from the finish line so rivals and lap counting know the order of the road.
+function traceLoop() {
+  let start = null
+  CONFIG.track.forEach((row, r) => [...row].forEach((ch, c) => { if (ch === 'F') start = { c, r } }))
+  if (!start) throw new Error('The track needs an F start/finish tile.')
+  const path = [start]
+  let { c, r } = start
+  let dir = 'W'
+  for (let guard = 0; guard < 500; guard++) {
+    c += STEP[dir][0]; r += STEP[dir][1]
+    if (c === start.c && r === start.r) break
+    const links = LINKS[cell(c, r)]
+    if (!links) throw new Error(`The road breaks at column ${c}, row ${r}.`)
+    path.push({ c, r })
+    dir = [...links].find((d) => d !== OPPOSITE[dir])
+  }
+  return path
+}
+
+function fallbacks(scene) {
+  const make = (k, w, h, draw) => {
+    if (scene.textures.exists(k)) return
+    const g = scene.make.graphics({ x: 0, y: 0 }, false)
+    draw(g, w, h)
+    g.generateTexture(k, w, h)
+    g.destroy()
+  }
+  make('grass', TILE, TILE, (g) => { g.fillStyle(0x2fae5b).fillRect(0, 0, TILE, TILE) })
+  const road = (open) => (g) => {
+    g.fillStyle(0x2fae5b).fillRect(0, 0, TILE, TILE).fillStyle(0x9aa3ad)
+    g.fillRect(24, 24, 80, 80)
+    if (open.includes('N')) g.fillRect(24, 0, 80, 24)
+    if (open.includes('S')) g.fillRect(24, 104, 80, 24)
+    if (open.includes('W')) g.fillRect(0, 24, 24, 80)
+    if (open.includes('E')) g.fillRect(104, 24, 24, 80)
+  }
+  for (const [ch, key] of Object.entries(ROAD_ART)) make(key, TILE, TILE, road(LINKS[ch]))
+  for (const car of [CONFIG.playerCar, ...CONFIG.rivals.map((r) => r.car)]) make(car, 70, 130, (g) => { g.fillStyle(0xff5a36).fillRoundedRect(4, 4, 62, 122, 16).fillStyle(0xffffff).fillRect(14, 24, 42, 16) })
+  make('tires_red', 56, 56, (g) => { g.fillStyle(0x333333).fillCircle(28, 28, 26) })
+  make('cone_straight', 44, 44, (g) => { g.fillStyle(0xff8a00).fillCircle(22, 22, 18) })
+  make('tree_large', 200, 200, (g) => { g.fillStyle(0x1f7a3a).fillCircle(100, 100, 90) })
+  make('tribune_full', 448, 223, (g) => { g.fillStyle(0x8892a0).fillRect(0, 0, 448, 223) })
+}
+
+class Race extends Phaser.Scene {
+  constructor() { super('race') }
+  preload() { studio.preloadPhaser(this) }
+
+  create() {
+    fallbacks(this)
+    this.path = traceLoop()
+    const rows = CONFIG.track.length
+    const cols = Math.max(...CONFIG.track.map((r) => r.length))
+    this.worldW = cols * TILE
+    this.worldH = rows * TILE
+    this.cameras.main.setBackgroundColor(palette().sky).setBounds(-TILE, -TILE, this.worldW + TILE * 2, this.worldH + TILE * 2)
+    this.obstacles = []
+
+    for (let r = -1; r <= rows; r++) {
+      for (let c = -1; c <= cols; c++) {
+        const ch = cell(c, r)
+        this.add.image(c * TILE + TILE / 2, r * TILE + TILE / 2, ROAD_ART[ch] || ((c * 7 + r * 13) % 11 === 0 && this.textures.exists('grass2') ? 'grass2' : 'grass'))
+        const { x, y } = center(c, r)
+        if (ch === 'o') this.addObstacle(x, y, 'tires_red', 24)
+        if (ch === 'c') this.addObstacle(x, y, 'cone_straight', 18)
+        if (ch === 't') this.add.image(x, y, this.textures.exists('tree_large') ? 'tree_large' : 'tree_small').setScale(0.6).setDepth(8).setAlpha(0.95)
+        if (ch === 'T') this.add.image(x, y, 'tribune_full').setScale(0.5).setDepth(1)
+      }
+    }
+
+    // Cars line up behind the finish line, two by two, facing west.
+    const f = center(this.path[0].c, this.path[0].r)
+    const grid = [[40, -26], [40, 26], [120, -26], [120, 26]]
+    const cars = [{ car: CONFIG.playerCar, skill: 1, player: true }, ...CONFIG.rivals]
+    this.cars = cars.map((spec, i) => {
+      const sprite = this.add.image(f.x + grid[i][0], f.y + grid[i][1], spec.car).setScale(0.5).setDepth(5).setRotation(-Math.PI / 2)
+      return { sprite, player: !!spec.player, skill: spec.skill, angle: -Math.PI / 2, vx: 0, vy: 0, index: 0, laps: 0, lapStart: 0, lane: grid[i][1] * 0.6, done: false, finishTime: 0 }
+    })
+    this.player = this.cars[0]
+
+    this.state = { phase: 'ready', countdown: 3, t0: 0, best: studio.load('bestLap') || null, lastLap: null }
+    this.cameras.main.startFollow(this.player.sprite, true, 0.1, 0.1)
+    this.fit()
+    this.scale.on('resize', this.fit, this)
+    this.events.once('shutdown', () => this.scale.off('resize', this.fit, this))
+    this.skids = this.add.graphics().setDepth(2)
+    this.scene.launch('hud', { race: this })
+  }
+
+  addObstacle(x, y, key, radius) {
+    this.add.image(x, y, key).setDepth(4)
+    this.obstacles.push({ x, y, radius })
+  }
+
+  fit() {
+    const { width, height } = this.scale
+    this.cameras.main.setZoom(Phaser.Math.Clamp(Math.min(width / (TILE * 5.2), height / (TILE * 5.2)), 0.35, 1.1))
+  }
+
+  startCountdown() {
+    this.state.phase = 'countdown'
+    const tick = () => {
+      this.events.emit('countdown', this.state.countdown)
+      studio.sound('select', [null, null, this.state.countdown ? 440 : 880, 0.01, 0.08, 0.1])
+      if (this.state.countdown === 0) {
+        this.state.phase = 'racing'
+        this.state.t0 = this.time.now
+        for (const car of this.cars) car.lapStart = this.time.now
+        return
+      }
+      this.state.countdown -= 1
+      this.time.delayedCall(800, tick)
+    }
+    tick()
+  }
+
+  onRoad(x, y) {
+    return !!LINKS[cell(Math.floor(x / TILE), Math.floor(y / TILE))]
+  }
+
+  // Top-down car handling: forward thrust, steering that grows with speed,
+  // and grip that bleeds off sideways slide (low grip = drift).
+  drive(car, gas, brake, steer, dt) {
+    const fx = Math.sin(car.angle)
+    const fy = -Math.cos(car.angle)
+    let forward = car.vx * fx + car.vy * fy
+    let side = car.vx * -fy + car.vy * fx
+    const road = this.onRoad(car.sprite.x, car.sprite.y)
+    const top = (road ? CONFIG.topSpeed : CONFIG.offroadSpeed) * car.skill
+    if (gas) forward += CONFIG.accel * dt
+    else if (brake) forward -= (forward > 0 ? CONFIG.brake : CONFIG.accel * 0.6) * dt
+    else forward -= forward * 1.2 * dt
+    forward = Phaser.Math.Clamp(forward - (Math.abs(forward) > top ? (Math.abs(forward) - top) * 3 * dt * Math.sign(forward) : 0), -top * 0.4, top * 1.05)
+    car.angle += steer * CONFIG.steer * dt * Phaser.Math.Clamp(forward / 220, -1, 1)
+    side *= Math.exp(-CONFIG.grip * (road ? 1 : 0.6) * dt)
+    const nfx = Math.sin(car.angle)
+    const nfy = -Math.cos(car.angle)
+    car.vx = nfx * forward + -nfy * side
+    car.vy = nfy * forward + nfx * side
+    car.sprite.x += car.vx * dt
+    car.sprite.y += car.vy * dt
+    car.sprite.rotation = car.angle
+    if (Math.abs(side) > 120 && road) {
+      this.skids.fillStyle(0x222222, 0.25).fillCircle(car.sprite.x - nfx * 26, car.sprite.y - nfy * 26, 5)
+    }
+  }
+
+  ai(car, dt) {
+    const target = this.path[(car.index + 2) % this.path.length]
+    const next = this.path[(car.index + 3) % this.path.length]
+    const t = center(target.c, target.r)
+    const n = center(next.c, next.r)
+    const aim = { x: (t.x + n.x) / 2 + car.lane * 0.4, y: (t.y + n.y) / 2 + car.lane * 0.4 }
+    const want = Math.atan2(aim.x - car.sprite.x, -(aim.y - car.sprite.y))
+    const diff = Phaser.Math.Angle.Wrap(want - car.angle)
+    const speed = Math.hypot(car.vx, car.vy)
+    // Ease off for bends: the sharper the upcoming turn, the lower the target speed.
+    const bend = Math.abs(Phaser.Math.Angle.Wrap(Math.atan2(n.x - t.x, -(n.y - t.y)) - car.angle))
+    const limit = CONFIG.topSpeed * car.skill * (bend > 0.6 || Math.abs(diff) > 0.6 ? 0.62 : 1)
+    this.drive(car, speed < limit, speed > limit * 1.15, Phaser.Math.Clamp(diff * 2.6, -1, 1), dt)
+  }
+
+  // Progress along the traced loop: a car advances when it reaches the next tile.
+  // A car that cuts a corner may skip a tile, so look a few tiles ahead.
+  track(car) {
+    const c = Math.floor(car.sprite.x / TILE)
+    const r = Math.floor(car.sprite.y / TILE)
+    for (let ahead = 1; ahead <= 3; ahead++) {
+      const i = (car.index + ahead) % this.path.length
+      if (this.path[i].c === c && this.path[i].r === r) {
+        const wrapped = i < car.index
+        car.index = i
+        if (wrapped) this.lap(car)
+        return
+      }
+    }
+  }
+
+  lap(car) {
+    const time = (this.time.now - car.lapStart) / 1000
+    car.lapStart = this.time.now
+    car.laps += 1
+    if (!car.player) {
+      if (car.laps >= CONFIG.laps && !car.done) { car.done = true; car.finishTime = this.time.now }
+      return
+    }
+    this.state.lastLap = time
+    if (!this.state.best || time < this.state.best) { this.state.best = time; studio.save('bestLap', time) }
+    studio.sound('coin', [null, null, 1675, null, 0.06, 0.24, 1, 1.82, null, null, 837, 0.06])
+    if (car.laps >= CONFIG.laps) this.finish()
+    else if (car.laps === CONFIG.laps - 1) studio.say('Final lap!', { voice: 'narrator' })
+  }
+
+  finish() {
+    this.player.done = true
+    this.state.phase = 'finished'
+    this.state.place = this.placeOf(this.player)
+    this.state.total = (this.time.now - this.state.t0) / 1000
+    studio.sound('magic', [null, null, 300, 0.04, 0.12, 0.35, null, 1.3, null, null, 420, 0.06, 0.1])
+    this.events.emit('finished')
+  }
+
+  placeOf(car) {
+    const score = (c) => (c.done ? 1e6 - c.finishTime : 0) + c.laps * 1000 + c.index
+    return 1 + this.cars.filter((o) => o !== car && score(o) > score(car)).length
+  }
+
+  collide() {
+    for (let i = 0; i < this.cars.length; i++) {
+      const a = this.cars[i].sprite
+      for (let j = i + 1; j < this.cars.length; j++) {
+        const b = this.cars[j].sprite
+        const dx = b.x - a.x
+        const dy = b.y - a.y
+        const d = Math.hypot(dx, dy)
+        if (d > 0 && d < 46) {
+          const push = (46 - d) / 2
+          a.x -= dx / d * push; a.y -= dy / d * push
+          b.x += dx / d * push; b.y += dy / d * push
+          if (this.cars[i].player || this.cars[j].player) studio.sound('bump', [null, null, 120, 0.01, 0.02, 0.06, 4])
+        }
+      }
+    }
+    for (const car of this.cars) {
+      for (const o of this.obstacles) {
+        const dx = car.sprite.x - o.x
+        const dy = car.sprite.y - o.y
+        const d = Math.hypot(dx, dy)
+        if (d > 0 && d < o.radius + 24) {
+          car.sprite.x = o.x + dx / d * (o.radius + 24)
+          car.sprite.y = o.y + dy / d * (o.radius + 24)
+          car.vx *= -0.3; car.vy *= -0.3
+          if (car.player) { studio.sound('hurt'); this.cameras.main.shake(120, 0.006) }
+        }
+      }
+      car.sprite.x = Phaser.Math.Clamp(car.sprite.x, 20, this.worldW - 20)
+      car.sprite.y = Phaser.Math.Clamp(car.sprite.y, 20, this.worldH - 20)
+    }
+  }
+
+  update(time, delta) {
+    if (this.state.phase !== 'racing' && this.state.phase !== 'finished') return
+    const dt = Math.min(delta, 50) / 1000
+    const input = studio.input
+    const tilt = input.tilt ? input.tilt.x : 0
+    for (const car of this.cars) {
+      if (car.player && !car.done) this.drive(car, input.a || input.y < -0.3, input.b || input.y > 0.4, Phaser.Math.Clamp(input.x + tilt, -1, 1), dt)
+      else if (car.player) this.drive(car, false, true, 0, dt)
+      else this.ai(car, dt)
+      this.track(car)
+    }
+    this.collide()
+    this.events.emit('hud')
+  }
+}
+
+class Hud extends Phaser.Scene {
+  constructor() { super('hud') }
+  init(data) { this.race = data.race }
+
+  async create() {
+    await studio.fontReady
+    const pal = palette()
+    const text = (x, y, s, size, color = pal.ink, origin = 0.5) => this.add.text(x, y, s, { fontFamily: font(), fontSize: size + 'px', color }).setOrigin(origin, 0.5)
+    this.bar = this.add.graphics()
+    this.lapText = text(28, 40, '', 22, pal.ink, 0)
+    this.posText = text(0, 40, '', 30, pal.accent, 1)
+    this.timeText = text(28, 90, '', 18, '#ffffff', 0).setStroke(pal.ink, 4)
+    this.map = this.add.graphics()
+    this.big = text(0, 0, '', 110, '#ffffff').setStroke(pal.ink, 10).setVisible(false)
+
+    this.panel = this.add.container(0, 0)
+    this.panelBg = this.add.graphics()
+    this.titleText = text(0, -96, CONFIG.title, 44)
+    this.subText = text(0, -44, `${CONFIG.laps} laps  ·  hold Gas, steer with the stick`, 18)
+    this.subText2 = text(0, -12, '', 18)
+    this.button = this.add.graphics()
+    this.buttonText = text(0, 74, 'Tap to start', 26, '#ffffff')
+    this.panel.add([this.panelBg, this.titleText, this.subText, this.subText2, this.button, this.buttonText])
+
+    this.hit = this.add.zone(0, 0, 10, 10).setOrigin(0.5).setInteractive()
+    this.hit.on('pointerdown', () => this.go())
+    this.layout()
+    this.scale.on('resize', this.layout, this)
+    this.events.once('shutdown', () => this.scale.off('resize', this.layout, this))
+    this.race.events.on('hud', this.refresh, this)
+    this.race.events.on('countdown', (n) => this.showCount(n))
+    this.race.events.on('finished', () => this.showEnd())
+    this.offA = studio.onPress('a', () => { if (this.panel.visible) this.go() })
+    this.events.once('shutdown', () => this.offA())
+    this.refresh()
+  }
+
+  go() {
+    const phase = this.race.state.phase
+    if (phase === 'ready') {
+      this.panel.setVisible(false)
+      this.hit.disableInteractive()
+      this.race.startCountdown()
+      studio.say('Drivers, start your engines!', { voice: 'narrator' })
+    } else if (phase === 'finished') {
+      this.scene.stop()
+      this.race.scene.restart()
+    }
+  }
+
+  showCount(n) {
+    this.big.setText(n === 0 ? 'GO!' : String(n)).setVisible(true).setScale(1.4).setAlpha(1)
+    this.tweens.add({ targets: this.big, scale: 1, alpha: n === 0 ? 0 : 1, duration: 700 })
+  }
+
+  layout() {
+    const ui = Phaser.Math.Clamp(Math.min(this.scale.width / 420, this.scale.height / 680), 0.6, 1.15)
+    this.cameras.main.setOrigin(0, 0).setZoom(ui)
+    const width = this.scale.width / ui
+    const height = this.scale.height / ui
+    this.W = width
+    const pal = palette()
+    const barW = Math.min(width - 24, 300)
+    this.bar.clear().fillStyle(hex(pal.panel), 0.92).fillRoundedRect(12, 12, barW, 56, 18)
+    this.posText.setPosition(12 + barW - 16, 40)
+    this.big.setPosition(width / 2, height * 0.4)
+    this.panel.setPosition(width / 2, height / 2)
+    const w = Math.min(width - 40, 420)
+    this.panelBg.clear().fillStyle(hex(pal.panel), 0.96).fillRoundedRect(-w / 2, -150, w, 290, 30)
+    this.button.clear().fillStyle(hex(pal.accent), 1).fillRoundedRect(-130, 46, 260, 58, 29)
+    this.hit.setPosition(width / 2, height / 2).setSize(width, height)
+    if (this.hit.input) this.hit.input.hitArea.setTo(0, 0, width, height)
+  }
+
+  refresh() {
+    const race = this.race
+    const s = race.state
+    const p = race.player
+    const lap = Math.min(p.laps + 1, CONFIG.laps)
+    this.lapText.setText(`Lap ${lap}/${CONFIG.laps}`)
+    const place = race.placeOf(p)
+    this.posText.setText(['1st', '2nd', '3rd', '4th'][place - 1] || `${place}th`)
+    const now = s.phase === 'racing' ? (race.time.now - p.lapStart) / 1000 : 0
+    this.timeText.setText(`${now.toFixed(1)} s${s.best ? `   best ${s.best.toFixed(2)} s` : ''}`)
+    // Minimap: the road loop and a dot for every car.
+    const size = 96
+    const scale = size / Math.max(race.worldW, race.worldH)
+    const ox = this.W - size - 16
+    const oy = 16
+    this.map.clear().fillStyle(0x000000, 0.35).fillRoundedRect(ox - 8, oy - 8, size + 16, race.worldH * scale + 16, 12)
+    this.map.lineStyle(5, 0xffffff, 0.9).beginPath()
+    race.path.forEach((t, i) => { const c = center(t.c, t.r); if (i === 0) this.map.moveTo(ox + c.x * scale, oy + c.y * scale); else this.map.lineTo(ox + c.x * scale, oy + c.y * scale) })
+    this.map.closePath().strokePath()
+    for (const car of race.cars) this.map.fillStyle(car.player ? hex(palette().accent) : 0x3a4250).fillCircle(ox + car.sprite.x * scale, oy + car.sprite.y * scale, car.player ? 5 : 4)
+  }
+
+  showEnd() {
+    const s = this.race.state
+    const place = ['1st', '2nd', '3rd', '4th'][s.place - 1]
+    this.titleText.setText(s.place === 1 ? 'You win!' : `Finished ${place}`)
+    this.subText.setText(`Race ${s.total.toFixed(1)} s`)
+    this.subText2.setText(`Best lap ${s.best ? s.best.toFixed(2) : '-'} s`)
+    this.buttonText.setText('Race again')
+    this.time.delayedCall(900, () => { this.panel.setVisible(true); this.hit.setInteractive() })
+    studio.say(s.place === 1 ? 'Victory! First place!' : `You finished ${place}. Go again!`, { voice: s.place === 1 ? 'hero' : 'narrator' })
+  }
+}
+
+studio.controls({ stick: true, buttons: ['Gas', 'Brake'] })
+
+new Phaser.Game({
+  type: Phaser.AUTO,
+  backgroundColor: '#2fae5b',
+  scale: { mode: Phaser.Scale.RESIZE, width: window.innerWidth, height: window.innerHeight },
+  scene: [Race, Hud],
+})
+</script>
+</body>
+</html>

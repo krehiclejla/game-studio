@@ -1,0 +1,465 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gem Garden</title>
+<style>html,body{margin:0;height:100%;overflow:hidden;background:#2b1d4a;touch-action:none}</style>
+</head>
+<body>
+<script type="module">
+import Phaser from 'https://esm.sh/phaser@3.90.0'
+
+// Gem types come from the art kit: red (heart), orange (star), yellow (circle),
+// green (diamond), blue (gem), pink (pentagon). Goals count gems of a color.
+// Match 4 in a row: a line gem (clears its row or column). Match 5 or an L/T: a bomb (clears 3x3).
+const CONFIG = {
+  title: 'Gem Garden',
+  cols: 7,
+  rows: 8,
+  gems: ['red', 'orange', 'yellow', 'green', 'blue', 'pink'],
+  pointsPerGem: 10,
+  levels: [
+    { moves: 18, goals: { red: 12, blue: 12 } },
+    { moves: 20, goals: { green: 18, pink: 15, yellow: 10 } },
+    { moves: 22, goals: { orange: 20, red: 20, blue: 15 } },
+  ],
+}
+
+const palette = () => ({ ink: '#ffffff', accent: '#ff5fa2', panel: '#3a2a66f2', sky: '#2b1d4a', sky2: '#5b3a9e', ...studio.style.palette })
+const font = () => studio.style.font ? `"${studio.style.font}", system-ui, sans-serif` : 'system-ui, sans-serif'
+const hex = (c) => Phaser.Display.Color.HexStringToColor(String(c).slice(0, 7)).color
+const COLORS = { red: 0xe0474c, orange: 0xf5832a, yellow: 0xffd23f, green: 0x7cc242, blue: 0x2ea7e0, pink: 0xff8cc6 }
+
+function fallbacks(scene) {
+  const make = (k, draw) => {
+    if (scene.textures.exists(k)) return
+    const g = scene.make.graphics({ x: 0, y: 0 }, false)
+    draw(g)
+    g.generateTexture(k, 96, 96)
+    g.destroy()
+  }
+  for (const [name, color] of Object.entries(COLORS)) {
+    make(`gem_${name}`, (g) => g.fillStyle(color).fillRoundedRect(8, 8, 80, 80, 22))
+    make(`gem_${name}_special`, (g) => g.fillStyle(0xffffff).fillRoundedRect(2, 2, 92, 92, 26).fillStyle(color).fillRoundedRect(10, 10, 76, 76, 20))
+  }
+  make('cell', (g) => g.fillStyle(0xffffff, 0.12).fillRoundedRect(4, 4, 88, 88, 18))
+  make('cell_alt', (g) => g.fillStyle(0xffffff, 0.2).fillRoundedRect(4, 4, 88, 88, 18))
+  make('particleyellow_1', (g) => g.fillStyle(0xffe066).fillCircle(48, 48, 20))
+}
+
+const wait = (scene, ms) => new Promise((r) => scene.time.delayedCall(ms, r))
+const tween = (scene, config) => new Promise((r) => scene.tweens.add({ ...config, onComplete: r }))
+
+class Board extends Phaser.Scene {
+  constructor() { super('board') }
+  init(data) { this.levelIndex = data?.level || 0 }
+  preload() { studio.preloadPhaser(this) }
+
+  async create() {
+    fallbacks(this)
+    this.level = CONFIG.levels[this.levelIndex]
+    this.state = { moves: this.level.moves, score: 0, left: { ...this.level.goals }, started: false, over: false, busy: false }
+    this.bg = this.add.graphics().setDepth(-10)
+    this.cells = this.add.container(0, 0)
+    this.gemLayer = this.add.container(0, 0)
+    this.grid = []
+    for (let r = 0; r < CONFIG.rows; r++) {
+      this.grid.push([])
+      for (let c = 0; c < CONFIG.cols; c++) {
+        this.cells.add(this.add.image(0, 0, (r + c) % 2 ? 'cell_alt' : 'cell').setAlpha((r + c) % 2 ? 0.22 : 0.3).setData('rc', [r, c]))
+        let type
+        do { type = Phaser.Utils.Array.GetRandom(CONFIG.gems) } while (this.makesRun(r, c, type))
+        this.grid[r].push(this.spawn(r, c, type))
+      }
+    }
+    this.layout()
+    this.scale.on('resize', this.layout, this)
+    this.events.once('shutdown', () => this.scale.off('resize', this.layout, this))
+    this.input.on('pointerdown', (p) => this.press(p))
+    this.input.on('pointermove', (p) => this.drag(p))
+    this.input.on('pointerup', () => { this.pressed = null })
+    this.scene.launch('hud', { board: this })
+  }
+
+  makesRun(r, c, type) {
+    const at = (rr, cc) => this.grid[rr]?.[cc]?.type
+    return (at(r, c - 1) === type && at(r, c - 2) === type) || (at(r - 1, c) === type && at(r - 2, c) === type)
+  }
+
+  spawn(r, c, type, special = null) {
+    const sprite = this.add.image(0, 0, special ? `gem_${type}_special` : `gem_${type}`)
+    this.gemLayer.add(sprite)
+    const gem = { type, special, sprite }
+    if (this.size) this.place(gem, r, c)
+    return gem
+  }
+
+  // Everything is sized from the screen: header space on top, square cells below.
+  layout() {
+    const { width, height } = this.scale
+    const pal = palette()
+    this.bg.clear().fillGradientStyle(hex(pal.sky), hex(pal.sky), hex(pal.sky2), hex(pal.sky2), 1).fillRect(0, 0, width, height)
+    const top = Math.min(170, height * 0.24)
+    this.size = Math.floor(Math.min((width - 24) / CONFIG.cols, (height - top - 24) / CONFIG.rows, 92))
+    this.ox = (width - this.size * CONFIG.cols) / 2 + this.size / 2
+    this.oy = top + (height - top - this.size * CONFIG.rows) / 2 + this.size / 2
+    for (const cell of this.cells.list) {
+      const [r, c] = cell.getData('rc')
+      cell.setPosition(this.ox + c * this.size, this.oy + r * this.size).setDisplaySize(this.size, this.size)
+    }
+    this.grid.forEach((row, r) => row.forEach((gem, c) => gem && this.place(gem, r, c)))
+  }
+
+  pos(r, c) { return { x: this.ox + c * this.size, y: this.oy + r * this.size } }
+
+  place(gem, r, c) {
+    const { x, y } = this.pos(r, c)
+    const s = (this.size * 0.84) / Math.max(gem.sprite.width, gem.sprite.height)
+    gem.sprite.setPosition(x, y).setScale(s)
+  }
+
+  cellAt(p) {
+    const c = Math.round((p.x - this.ox) / this.size)
+    const r = Math.round((p.y - this.oy) / this.size)
+    return r >= 0 && r < CONFIG.rows && c >= 0 && c < CONFIG.cols ? { r, c } : null
+  }
+
+  // Swipe a gem, or tap one and then a neighbour.
+  press(p) {
+    if (!this.state.started || this.state.busy || this.state.over) return
+    const cell = this.cellAt(p)
+    if (!cell) return
+    if (this.selected && Math.abs(this.selected.r - cell.r) + Math.abs(this.selected.c - cell.c) === 1) {
+      const from = this.selected
+      this.clearSelection()
+      this.trySwap(from, cell)
+      return
+    }
+    this.clearSelection()
+    this.selected = cell
+    this.pressed = { ...cell, x: p.x, y: p.y }
+    const gem = this.grid[cell.r][cell.c]
+    this.tweens.add({ targets: gem.sprite, scale: gem.sprite.scale * 1.12, duration: 100 })
+    studio.sound('tap_a')
+  }
+
+  drag(p) {
+    if (!this.pressed || this.state.busy) return
+    const dx = p.x - this.pressed.x
+    const dy = p.y - this.pressed.y
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < this.size * 0.35) return
+    const to = Math.abs(dx) > Math.abs(dy) ? { r: this.pressed.r, c: this.pressed.c + Math.sign(dx) } : { r: this.pressed.r + Math.sign(dy), c: this.pressed.c }
+    const from = { r: this.pressed.r, c: this.pressed.c }
+    this.pressed = null
+    this.clearSelection()
+    if (to.r >= 0 && to.r < CONFIG.rows && to.c >= 0 && to.c < CONFIG.cols) this.trySwap(from, to)
+  }
+
+  clearSelection() {
+    if (!this.selected) return
+    const gem = this.grid[this.selected.r][this.selected.c]
+    if (gem) this.place(gem, this.selected.r, this.selected.c)
+    this.selected = null
+  }
+
+  async trySwap(a, b) {
+    this.state.busy = true
+    await this.swap(a, b)
+    const runs = this.findRuns()
+    if (!runs.length) {
+      studio.sound('bump', [null, null, 120, 0.01, 0.02, 0.06, 4])
+      await this.swap(a, b)
+      this.state.busy = false
+      return
+    }
+    this.state.moves -= 1
+    studio.sound('switch_a', [null, null, 400, 0.01, 0.03, 0.06])
+    await this.resolve(runs, b)
+    this.state.busy = false
+    this.events.emit('hud')
+    this.checkEnd()
+  }
+
+  async swap(a, b) {
+    const ga = this.grid[a.r][a.c]
+    const gb = this.grid[b.r][b.c]
+    this.grid[a.r][a.c] = gb
+    this.grid[b.r][b.c] = ga
+    const pa = this.pos(b.r, b.c)
+    const pb = this.pos(a.r, a.c)
+    await Promise.all([tween(this, { targets: ga.sprite, x: pa.x, y: pa.y, duration: 160 }), tween(this, { targets: gb.sprite, x: pb.x, y: pb.y, duration: 160 })])
+  }
+
+  // Runs of 3+ in rows and columns; each run knows its cells and direction.
+  findRuns() {
+    const runs = []
+    const scan = (horizontal) => {
+      const outer = horizontal ? CONFIG.rows : CONFIG.cols
+      const inner = horizontal ? CONFIG.cols : CONFIG.rows
+      for (let o = 0; o < outer; o++) {
+        let start = 0
+        for (let i = 1; i <= inner; i++) {
+          const cellAt = (k) => (horizontal ? this.grid[o][k] : this.grid[k]?.[o])
+          if (i < inner && cellAt(i) && cellAt(start) && cellAt(i).type === cellAt(start).type) continue
+          if (i - start >= 3) runs.push({ horizontal, cells: Array.from({ length: i - start }, (_, k) => (horizontal ? { r: o, c: start + k } : { r: start + k, c: o })) })
+          start = i
+        }
+      }
+    }
+    scan(true)
+    scan(false)
+    return runs
+  }
+
+  async resolve(runs, focus) {
+    let combo = 0
+    while (runs.length) {
+      combo += 1
+      const clear = new Map()
+      const specials = []
+      const key = ({ r, c }) => `${r},${c}`
+      for (const run of runs) {
+        for (const cell of run.cells) clear.set(key(cell), cell)
+        // A long run (or two crossing runs) leaves a power-up behind.
+        const crossing = runs.some((other) => other !== run && other.cells.some((a) => run.cells.some((b) => a.r === b.r && a.c === b.c)))
+        if (run.cells.length >= 4 || crossing) {
+          const at = run.cells.find((cell) => focus && cell.r === focus.r && cell.c === focus.c) || run.cells[Math.floor(run.cells.length / 2)]
+          if (!specials.some((s) => s.r === at.r && s.c === at.c)) specials.push({ ...at, type: this.grid[at.r][at.c].type, kind: run.cells.length >= 5 || crossing ? 'bomb' : 'line', horizontal: run.horizontal })
+        }
+      }
+      // Clearing a power-up sets it off.
+      for (const cell of [...clear.values()]) this.detonate(cell, clear)
+      let count = 0
+      for (const cell of clear.values()) {
+        const gem = this.grid[cell.r][cell.c]
+        if (!gem) continue
+        if (this.state.left[gem.type] > 0) this.state.left[gem.type] -= 1
+        this.burst(gem.sprite.x, gem.sprite.y, COLORS[gem.type])
+        this.tweens.add({ targets: gem.sprite, scale: 0, alpha: 0, duration: 180, onComplete: () => gem.sprite.destroy() })
+        this.grid[cell.r][cell.c] = null
+        count++
+      }
+      this.state.score += count * CONFIG.pointsPerGem * combo
+      studio.sound(combo > 1 ? 'coin' : 'gem', [null, null, 900 + combo * 120, null, 0.05, 0.15, 1, 1.5])
+      if (combo === 3) studio.say('Sweet combo!', { voice: 'kid' })
+      if (combo === 5) studio.say('Incredible!', { voice: 'kid' })
+      this.events.emit('hud')
+      await wait(this, 190)
+      for (const s of specials) {
+        this.grid[s.r][s.c] = this.spawn(s.r, s.c, s.type, s.kind)
+        this.grid[s.r][s.c].horizontal = s.horizontal
+      }
+      await this.fall()
+      runs = this.findRuns()
+      focus = null
+    }
+    if (!this.hasMove()) await this.shuffle()
+  }
+
+  detonate(cell, clear) {
+    const gem = this.grid[cell.r][cell.c]
+    if (!gem?.special || gem.fired) return
+    gem.fired = true
+    const add = (r, c) => {
+      if (r < 0 || c < 0 || r >= CONFIG.rows || c >= CONFIG.cols || !this.grid[r][c]) return
+      const k = `${r},${c}`
+      if (clear.has(k)) return
+      clear.set(k, { r, c })
+      this.detonate({ r, c }, clear)
+    }
+    if (gem.special === 'bomb') {
+      for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) add(cell.r + dr, cell.c + dc)
+      this.cameras.main.shake(160, 0.01)
+    } else {
+      for (let i = 0; i < Math.max(CONFIG.rows, CONFIG.cols); i++) (gem.horizontal ? add(cell.r, i) : add(i, cell.c))
+      const { x, y } = this.pos(cell.r, cell.c)
+      const beam = this.add.rectangle(x, y, gem.horizontal ? this.size * CONFIG.cols : this.size * 0.3, gem.horizontal ? this.size * 0.3 : this.size * CONFIG.rows, 0xffffff, 0.8)
+      this.tweens.add({ targets: beam, alpha: 0, duration: 300, onComplete: () => beam.destroy() })
+    }
+    studio.sound('magic', [null, null, 300, 0.02, 0.1, 0.2, 1, 1.4])
+  }
+
+  async fall() {
+    const moves = []
+    for (let c = 0; c < CONFIG.cols; c++) {
+      let write = CONFIG.rows - 1
+      for (let r = CONFIG.rows - 1; r >= 0; r--) {
+        const gem = this.grid[r][c]
+        if (!gem) continue
+        if (write !== r) {
+          this.grid[write][c] = gem
+          this.grid[r][c] = null
+          const p = this.pos(write, c)
+          moves.push(tween(this, { targets: gem.sprite, y: p.y, duration: 90 + (write - r) * 45, ease: 'Bounce.easeOut' }))
+        }
+        write--
+      }
+      for (let r = write, n = 1; r >= 0; r--, n++) {
+        const gem = this.spawn(r, c, Phaser.Utils.Array.GetRandom(CONFIG.gems))
+        this.grid[r][c] = gem
+        const p = this.pos(r, c)
+        gem.sprite.y = this.pos(-n, c).y
+        moves.push(tween(this, { targets: gem.sprite, y: p.y, duration: 140 + (r + n) * 45, ease: 'Bounce.easeOut' }))
+      }
+    }
+    await Promise.all(moves)
+  }
+
+  hasMove() {
+    const swapTest = (a, b) => {
+      const t = this.grid[a.r][a.c]; this.grid[a.r][a.c] = this.grid[b.r][b.c]; this.grid[b.r][b.c] = t
+      const ok = this.findRuns().length > 0
+      this.grid[b.r][b.c] = this.grid[a.r][a.c]; this.grid[a.r][a.c] = t
+      return ok
+    }
+    for (let r = 0; r < CONFIG.rows; r++) for (let c = 0; c < CONFIG.cols; c++) {
+      if (c + 1 < CONFIG.cols && swapTest({ r, c }, { r, c: c + 1 })) return true
+      if (r + 1 < CONFIG.rows && swapTest({ r, c }, { r: r + 1, c })) return true
+    }
+    return false
+  }
+
+  async shuffle() {
+    do {
+      const gems = this.grid.flat()
+      Phaser.Utils.Array.Shuffle(gems)
+      this.grid = Array.from({ length: CONFIG.rows }, (_, r) => gems.slice(r * CONFIG.cols, (r + 1) * CONFIG.cols))
+    } while (this.findRuns().length || !this.hasMove())
+    await Promise.all(this.grid.flatMap((row, r) => row.map((gem, c) => { const p = this.pos(r, c); return tween(this, { targets: gem.sprite, x: p.x, y: p.y, duration: 300 }) })))
+  }
+
+  burst(x, y, color) {
+    const key = this.textures.exists('particlewhite_1') ? 'particlewhite_1' : 'particleyellow_1'
+    for (let i = 0; i < 5; i++) {
+      const bit = this.add.image(x, y, key).setTint(color).setScale(this.size / 180).setDepth(5)
+      const a = Math.random() * Math.PI * 2
+      this.tweens.add({ targets: bit, x: x + Math.cos(a) * this.size * 0.8, y: y + Math.sin(a) * this.size * 0.8, alpha: 0, scale: 0.05, duration: 420, onComplete: () => bit.destroy() })
+    }
+  }
+
+  checkEnd() {
+    const done = Object.values(this.state.left).every((n) => n <= 0)
+    if (!done && this.state.moves > 0) return
+    this.state.over = true
+    this.state.won = done
+    if (done) {
+      this.state.score += this.state.moves * 50
+      this.state.stars = this.state.moves >= 5 ? 3 : this.state.moves >= 2 ? 2 : 1
+      const best = studio.load('best') || {}
+      best[this.levelIndex] = Math.max(best[this.levelIndex] || 0, this.state.score)
+      studio.save('best', best)
+      this.state.best = best[this.levelIndex]
+      studio.sound('magic', [null, null, 300, 0.04, 0.12, 0.35, null, 1.3, null, null, 420, 0.06, 0.1])
+    }
+    this.events.emit('ended', done)
+  }
+}
+
+class Hud extends Phaser.Scene {
+  constructor() { super('hud') }
+  init(data) { this.board = data.board }
+
+  async create() {
+    await studio.fontReady
+    const pal = palette()
+    const text = (x, y, s, size, color = pal.ink) => this.add.text(x, y, s, { fontFamily: font(), fontSize: size + 'px', fontStyle: '700', color }).setOrigin(0.5)
+    this.bar = this.add.graphics()
+    this.movesText = text(0, 0, '', 34)
+    this.movesLabel = text(0, 0, 'moves', 14)
+    this.scoreText = text(0, 0, '', 20)
+    this.goalIcons = Object.keys(this.board.level.goals).map((type) => ({ type, icon: this.add.image(0, 0, `gem_${type}`), label: text(0, 0, '', 18) }))
+
+    this.panel = this.add.container(0, 0)
+    this.panelBg = this.add.graphics()
+    this.titleText = text(0, -96, CONFIG.title, 44)
+    this.subText = text(0, -40, `Level ${this.board.levelIndex + 1}: match 3 to reach the goals`, 18)
+    this.stars = [-70, 0, 70].map((x) => this.add.star(x, 14, 5, 12, 28, 0xffd23f).setStrokeStyle(4, 0xffffff, 0.8).setVisible(false))
+    this.button = this.add.graphics()
+    this.buttonText = text(0, 88, 'Tap to start', 26)
+    this.panel.add([this.panelBg, this.titleText, this.subText, ...this.stars, this.button, this.buttonText])
+
+    this.hit = this.add.zone(0, 0, 10, 10).setOrigin(0.5).setInteractive()
+    this.hit.on('pointerdown', () => this.go())
+    this.layout()
+    this.scale.on('resize', this.layout, this)
+    this.events.once('shutdown', () => this.scale.off('resize', this.layout, this))
+    this.board.events.on('hud', this.refresh, this)
+    this.board.events.on('ended', (won) => this.showEnd(won))
+    this.offA = studio.onPress('a', () => { if (this.panel.visible) this.go() })
+    this.events.once('shutdown', () => this.offA())
+    this.refresh()
+  }
+
+  go() {
+    const b = this.board
+    if (!b.state.started) {
+      b.state.started = true
+      this.panel.setVisible(false)
+      this.hit.disableInteractive()
+      const goal = Object.entries(b.level.goals).map(([t, n]) => `${n} ${t}`).join(', ')
+      studio.say(`Collect ${goal} in ${b.level.moves} moves.`, { voice: 'narrator' })
+      return
+    }
+    if (!b.state.over) return
+    const next = b.state.won ? (b.levelIndex + 1) % CONFIG.levels.length : b.levelIndex
+    this.scene.stop()
+    b.scene.restart({ level: next })
+  }
+
+  layout() {
+    const { width, height } = this.scale
+    const pal = palette()
+    const top = Math.min(170, height * 0.24)
+    const barW = Math.min(width - 24, 460)
+    const x0 = (width - barW) / 2
+    const barH = Math.min(96, top - 30)
+    this.bar.clear().fillStyle(hex(pal.panel), 0.95).fillRoundedRect(x0, 14, barW, barH, 22)
+    const cy = 14 + barH / 2
+    this.movesText.setPosition(x0 + 48, cy - 8)
+    this.movesLabel.setPosition(x0 + 48, cy + 20)
+    this.scoreText.setPosition(x0 + barW - 52, cy)
+    const slots = this.goalIcons.length
+    const span = barW - 200
+    this.goalIcons.forEach((g, i) => {
+      const gx = x0 + 100 + (span / slots) * (i + 0.5)
+      g.icon.setPosition(gx - 14, cy).setScale(Math.min(40, barH * 0.5) / Math.max(g.icon.width, g.icon.height))
+      g.label.setPosition(gx + 18, cy)
+    })
+    const ui = Math.min(1, width / 440)
+    this.panel.setPosition(width / 2, height / 2).setScale(ui)
+    this.panelBg.clear().fillStyle(hex(pal.panel), 0.97).fillRoundedRect(-200, -150, 400, 290, 30)
+    this.button.clear().fillStyle(hex(pal.accent), 1).fillRoundedRect(-130, 60, 260, 58, 29)
+    this.hit.setPosition(width / 2, height / 2).setSize(width, height)
+    if (this.hit.input) this.hit.input.hitArea.setTo(0, 0, width, height)
+  }
+
+  refresh() {
+    const s = this.board.state
+    this.movesText.setText(String(s.moves))
+    this.scoreText.setText(String(s.score))
+    this.goalIcons.forEach((g) => g.label.setText(String(Math.max(0, s.left[g.type]))).setColor(s.left[g.type] > 0 ? palette().ink : palette().good || '#5ee6a8'))
+  }
+
+  showEnd(won) {
+    const s = this.board.state
+    this.titleText.setText(won ? 'Level complete!' : 'Out of moves')
+    this.subText.setText(won ? `Score ${s.score}  ·  Best ${s.best}` : 'So close. Try again!')
+    this.stars.forEach((star, i) => star.setVisible(won).setAlpha(i < (s.stars || 0) ? 1 : 0.25))
+    this.buttonText.setText(won ? 'Next level' : 'Retry')
+    this.time.delayedCall(700, () => { this.panel.setVisible(true); this.hit.setInteractive() })
+    studio.say(won ? 'Level complete! Beautiful.' : 'Out of moves. One more try?', { voice: won ? 'kid' : 'narrator' })
+  }
+}
+
+studio.controls({ stick: false, buttons: [] })
+
+new Phaser.Game({
+  type: Phaser.AUTO,
+  backgroundColor: '#2b1d4a',
+  scale: { mode: Phaser.Scale.RESIZE, width: window.innerWidth, height: window.innerHeight },
+  scene: [Board, Hud],
+})
+</script>
+</body>
+</html>

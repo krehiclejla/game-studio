@@ -1,0 +1,68 @@
+{
+  "name": "Sun Court",
+  "env": "dome",
+  "roof": "open",
+  "size": {
+    "r": 10,
+    "h": 7
+  },
+  "sky": {
+    "style": "day",
+    "clouds": 0.5
+  },
+  "palette": {
+    "wall": "#e9dcc4",
+    "floor": "#d8c9a0",
+    "accent": "#e0a060",
+    "glow": "#fff1d0"
+  },
+  "walls": "stone",
+  "floor": "tile",
+  "props": [
+    {
+      "type": "plant",
+      "ring": {
+        "center": [
+          0,
+          0
+        ],
+        "radius": 3,
+        "count": 5
+      }
+    },
+    {
+      "type": "orb",
+      "at": [
+        0,
+        0
+      ],
+      "y": 2.2,
+      "color": "#ffd890",
+      "radius": 0.5
+    },
+    {
+      "type": "pillar",
+      "ring": {
+        "center": [
+          0,
+          0
+        ],
+        "radius": 6.5,
+        "count": 10
+      }
+    }
+  ],
+  "particles": [
+    {
+      "type": "petals",
+      "count": 80,
+      "color": "#ffc3d6",
+      "radius": 8,
+      "height": 7
+    }
+  ],
+  "stand": {
+    "style": "wall",
+    "color": "#d9bf94"
+  }
+}

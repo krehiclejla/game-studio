@@ -1,0 +1,33 @@
+{
+  "id": "explorer-toy",
+  "genre": "explorer3d",
+  "title": "Toy world",
+  "style": "Low-poly 3D toy platforms",
+  "pack": "platformer-kit",
+  "credit": "Kenney (kenney.nl), CC0",
+  "font": "Nunito",
+  "palette": {
+    "sky": "#9fd8ff",
+    "sky2": "#e8f7ff",
+    "ink": "#24335a",
+    "accent": "#ff7a45",
+    "good": "#35c27a",
+    "panel": "#ffffffe6"
+  },
+  "stripTextures": true,
+  "images": [
+    {
+      "glob": "Models/GLB format/Textures/colormap.png",
+      "rename": {
+        "colormap": "colormap"
+      }
+    }
+  ],
+  "models": [
+    "Models/GLB format/{character-oobi,block-grass,block-grass-large,block-grass-long,block-grass-low,block-grass-large-tall,platform,platform-ramp,block-moving,coin-gold,star,heart,jewel,key,chest,flag,tree,tree-pine,rocks,flowers,mushrooms,grass,plant,fence-straight,crate,spike-block,trap-spikes,spring,saw,sign}.glb"
+  ],
+  "sounds": [
+    "new-platformer-pack:Sounds/sfx_{jump,coin,hurt,magic,select,gem,bump}.ogg"
+  ],
+  "notes": "Models (studio.model(name), load with GLTFLoader.parse) share ONE texture that is shipped as the image \"colormap\": after parsing, set every mesh material's map to a THREE.Texture made from studio.image('colormap') (flipY = false, colorSpace = SRGBColorSpace) \u2014 see games/*explorer* template. Units are meters on a 1 m grid; models sit on y = 0 and are centered in x/z. Blocks: block_grass (1x1x1), block_grass_low (1x0.5x1), block_grass_long (2x1x1), block_grass_large (2x1x2), block_grass_large_tall (2x2x2), platform (1x0.2x1 thin slab), platform_ramp, block_moving (for moving platforms). Pickups: coin_gold, star, heart, jewel, key, chest. Goal: flag. Hazards: spike_block, trap_spikes, saw. Props: spring, tree, tree_pine, rocks, flowers, mushrooms, grass, plant, fence_straight, crate, sign. Hero: character_oobi (0.9 m tall, faces +z) with animations static, idle, walk, sprint, jump, fall, crouch, sit, drive, die, pick-up, emote-yes. Sounds: jump, coin, gem, hurt, bump, select, magic (win)."
+}

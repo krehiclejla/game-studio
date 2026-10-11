@@ -1,0 +1,86 @@
+{
+  "name": "White Cube",
+  "env": "hall",
+  "size": {
+    "w": 12,
+    "l": 26,
+    "h": 5.5
+  },
+  "palette": {
+    "wall": "#f4f2ee",
+    "floor": "#d8d4cc",
+    "ceiling": "#fbfaf8",
+    "trim": "#e6e2da",
+    "accent": "#c9c2b6",
+    "glow": "#ffffff"
+  },
+  "floor": "concrete",
+  "walls": "plaster",
+  "light": {
+    "hemi": {
+      "sky": "#ffffff",
+      "ground": "#d8d4cc",
+      "intensity": 1.8
+    },
+    "ambient": 0.8
+  },
+  "rug": false,
+  "props": [
+    {
+      "type": "pedestal",
+      "line": {
+        "from": [
+          0,
+          6
+        ],
+        "to": [
+          0,
+          -8
+        ],
+        "count": 4
+      }
+    },
+    {
+      "type": "orb",
+      "line": {
+        "from": [
+          0,
+          6
+        ],
+        "to": [
+          0,
+          -8
+        ],
+        "count": 4
+      },
+      "y": 1.6,
+      "radius": 0.18,
+      "color": "#e8d9b8"
+    },
+    {
+      "type": "plant",
+      "at": [
+        -4,
+        -11
+      ]
+    },
+    {
+      "type": "plant",
+      "at": [
+        4,
+        -11
+      ]
+    }
+  ],
+  "particles": [
+    {
+      "type": "dust",
+      "count": 60,
+      "color": "#ffffff"
+    }
+  ],
+  "stand": {
+    "style": "rail",
+    "color": "#1c1c1c"
+  }
+}

@@ -1,0 +1,94 @@
+{
+  "id": "puzzle-gems",
+  "genre": "puzzle",
+  "title": "Glossy tiles",
+  "style": "Shiny candy-colored tiles and balls",
+  "pack": "puzzle-pack-2",
+  "credit": "Kenney (kenney.nl), CC0",
+  "font": "Baloo 2",
+  "palette": {
+    "sky": "#2b1d4a",
+    "sky2": "#5b3a9e",
+    "ink": "#ffffff",
+    "accent": "#ff5fa2",
+    "good": "#5ee6a8",
+    "panel": "#3a2a66f2",
+    "shadow": "#00000055"
+  },
+  "images": [
+    {
+      "glob": "PNG/Tiles red/tileRed_{12,36}.png",
+      "max": 96,
+      "rename": {
+        "tilered_12": "gem_red",
+        "tilered_36": "gem_red_special"
+      }
+    },
+    {
+      "glob": "PNG/Tiles orange/tileOrange_{08,32}.png",
+      "max": 96,
+      "rename": {
+        "tileorange_08": "gem_orange",
+        "tileorange_32": "gem_orange_special"
+      }
+    },
+    {
+      "glob": "PNG/Tiles yellow/tileYellow_{11,35}.png",
+      "max": 96,
+      "rename": {
+        "tileyellow_11": "gem_yellow",
+        "tileyellow_35": "gem_yellow_special"
+      }
+    },
+    {
+      "glob": "PNG/Tiles green/tileGreen_{04,28}.png",
+      "max": 96,
+      "rename": {
+        "tilegreen_04": "gem_green",
+        "tilegreen_28": "gem_green_special"
+      }
+    },
+    {
+      "glob": "PNG/Tiles blue/tileBlue_{10,34}.png",
+      "max": 96,
+      "rename": {
+        "tileblue_10": "gem_blue",
+        "tileblue_34": "gem_blue_special"
+      }
+    },
+    {
+      "glob": "PNG/Tiles pink/tilePink_{05,29}.png",
+      "max": 96,
+      "rename": {
+        "tilepink_05": "gem_pink",
+        "tilepink_29": "gem_pink_special"
+      }
+    },
+    {
+      "glob": "PNG/Back tiles/BackTile_{05,06,01}.png",
+      "max": 96,
+      "rename": {
+        "backtile_05": "cell",
+        "backtile_06": "cell_alt",
+        "backtile_01": "frame"
+      }
+    },
+    {
+      "glob": "PNG/Particles yellow/particleYellow_{1,3,5}.png",
+      "max": 48
+    },
+    {
+      "glob": "PNG/Particles white/particleWhite_{1,3,5}.png",
+      "max": 48
+    },
+    {
+      "glob": "PNG/Coins/coin_0{1,2}.png",
+      "max": 64
+    }
+  ],
+  "sounds": [
+    "new-platformer-pack:Sounds/sfx_{gem,coin,magic,bump,select}.ogg",
+    "ui-pack:Sounds/{switch-a,tap-a}.ogg"
+  ],
+  "notes": "Six gem types, each a different color AND shape so they read on small screens: gem_red (heart), gem_orange (star), gem_yellow (circle), gem_green (diamond), gem_blue (cut gem), gem_pink (pentagon). Each has a bold-outlined twin gem_<color>_special for power-ups (line clear / bomb). About 96 px; draw them at the board cell size. Board: cell (grey rounded square) and cell_alt for a checker pattern, frame (white square with border). Particles 48 px: particleyellow_1/3/5, particlewhite_1/3/5 for sparkles. coin_01/coin_02 for rewards. No background image: use a vertical gradient from palette.sky to palette.sky2. Sounds: gem (match), coin, magic (level complete), bump (invalid move), select, switch_a (swap), tap_a (tap)."
+}

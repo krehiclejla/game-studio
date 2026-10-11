@@ -1,0 +1,50 @@
+{
+  "genres": [
+    {
+      "id": "platformer",
+      "title": "Platformer",
+      "blurb": "Run, jump and stomp through side-scrolling levels.",
+      "arts": ["platformer-cartoon"]
+    },
+    {
+      "id": "adventure",
+      "title": "Top-down adventure",
+      "blurb": "Explore a village and dungeon, talk to people, find treasure.",
+      "arts": ["adventure-pixel"]
+    },
+    {
+      "id": "physics",
+      "title": "Physics puzzle",
+      "blurb": "Launch, topple and stack with real physics.",
+      "arts": ["physics-cartoon"]
+    },
+    {
+      "id": "puzzle",
+      "title": "Match-3 puzzle",
+      "blurb": "Swap gems, chain combos, set off power-ups.",
+      "arts": ["puzzle-gems"]
+    },
+    {
+      "id": "racing",
+      "title": "Racing",
+      "blurb": "Top-down cars on tracks, laps and rivals.",
+      "arts": ["racing-topdown"]
+    },
+    {
+      "id": "explorer3d",
+      "title": "3D explorer",
+      "blurb": "A 3D character in a toy world of platforms and collectibles.",
+      "arts": ["explorer-toy"]
+    }
+  ],
+  "arts": {
+    "platformer-cartoon": { "title": "Cartoon meadow", "look": "Bright, rounded, hand-drawn cartoon" },
+    "platformer-pixel": { "title": "Retro pixel", "look": "Crisp 8-bit pixel art" },
+    "adventure-pixel": { "title": "Pixel village", "look": "Cozy 16-bit village and dungeon" },
+    "physics-cartoon": { "title": "Wood, stone & aliens", "look": "Chunky cartoon materials" },
+    "puzzle-gems": { "title": "Glossy tiles", "look": "Shiny candy-colored tiles and balls" },
+    "cards-table": { "title": "Card table", "look": "Classic playing cards, chips and dice" },
+    "racing-topdown": { "title": "Race day", "look": "Clean top-down cars and tracks" },
+    "explorer-toy": { "title": "Toy world", "look": "Low-poly 3D toy platforms" }
+  }
+}

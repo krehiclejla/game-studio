@@ -1,0 +1,135 @@
+{
+  "name": "Seaside Terrace",
+  "env": "open",
+  "hang": "ring",
+  "size": {
+    "ring": 9
+  },
+  "sky": {
+    "style": "day",
+    "clouds": 0.45
+  },
+  "terrain": {
+    "ground": "#d9c9a0",
+    "ground2": "#c9b88a",
+    "rock": "#9a9488",
+    "hills": 0.2,
+    "mountains": 0.15,
+    "lake": {
+      "at": [
+        0,
+        -34
+      ],
+      "radius": 28,
+      "color": "#2a8aa8"
+    }
+  },
+  "fog": {
+    "color": "#cfe6f2",
+    "density": 0.003
+  },
+  "light": {
+    "hemi": {
+      "sky": "#bcd8ff",
+      "ground": "#d9c9a0",
+      "intensity": 1.2
+    },
+    "sun": {
+      "color": "#fff3d6",
+      "intensity": 3.0,
+      "dir": [
+        0.5,
+        0.55,
+        -0.6
+      ]
+    }
+  },
+  "props": [
+    {
+      "type": "pillar",
+      "ring": {
+        "center": [
+          0,
+          0
+        ],
+        "radius": 14,
+        "count": 8
+      },
+      "color": "#f2efe8",
+      "height": 4
+    },
+    {
+      "type": "arch",
+      "at": [
+        0,
+        -16
+      ],
+      "color": "#f2efe8",
+      "height": 4.6,
+      "width": 4
+    },
+    {
+      "type": "model",
+      "name": "bench",
+      "at": [
+        -5,
+        3
+      ],
+      "rot": 90
+    },
+    {
+      "type": "model",
+      "name": "bench",
+      "at": [
+        5,
+        3
+      ],
+      "rot": -90
+    },
+    {
+      "type": "flowers",
+      "area": {
+        "center": [
+          0,
+          0
+        ],
+        "radius": 16,
+        "inner": 5
+      },
+      "count": 60
+    },
+    {
+      "type": "model",
+      "name": "lighthouse",
+      "at": [
+        -40,
+        -70
+      ],
+      "height": 22
+    },
+    {
+      "type": "cloud",
+      "area": {
+        "center": [
+          0,
+          -60
+        ],
+        "radius": 40
+      },
+      "count": 5
+    }
+  ],
+  "particles": [
+    {
+      "type": "petals",
+      "count": 40,
+      "color": "#ffffff",
+      "radius": 14,
+      "height": 6
+    }
+  ],
+  "stand": {
+    "style": "pillar",
+    "color": "#f2efe8"
+  }
+}

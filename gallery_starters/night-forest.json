@@ -1,0 +1,106 @@
+{
+  "name": "The Glow Wood",
+  "env": "open",
+  "hang": "ring",
+  "size": {
+    "ring": 9
+  },
+  "sky": {
+    "style": "night",
+    "stars": 1,
+    "moon": true
+  },
+  "terrain": {
+    "ground": "#2a5a40",
+    "ground2": "#3a7a5a",
+    "hills": 0.5,
+    "mountains": 0.4,
+    "lake": {
+      "at": [
+        14,
+        -8
+      ],
+      "radius": 6,
+      "color": "#1a4a6a"
+    }
+  },
+  "fog": {
+    "color": "#0c1424",
+    "density": 0.012
+  },
+  "light": {
+    "hemi": {
+      "sky": "#8fa3e8",
+      "ground": "#2a3a4a",
+      "intensity": 1.1
+    },
+    "sun": {
+      "color": "#9fb4ff",
+      "intensity": 0.9
+    }
+  },
+  "props": [
+    {
+      "type": "tree",
+      "kind": "pine",
+      "area": {
+        "center": [
+          0,
+          0
+        ],
+        "radius": 40,
+        "inner": 14
+      },
+      "count": 70
+    },
+    {
+      "type": "mushroom",
+      "area": {
+        "center": [
+          0,
+          0
+        ],
+        "radius": 16,
+        "inner": 4
+      },
+      "count": 25,
+      "color": "#7fd6c8"
+    },
+    {
+      "type": "crystal",
+      "at": [
+        -6,
+        4
+      ],
+      "color": "#8fb4ff",
+      "scale": 1.4
+    },
+    {
+      "type": "campfire",
+      "at": [
+        0,
+        0
+      ]
+    },
+    {
+      "type": "model",
+      "name": "street-lamp",
+      "at": [
+        4,
+        12
+      ]
+    }
+  ],
+  "particles": [
+    {
+      "type": "fireflies",
+      "count": 140,
+      "radius": 20,
+      "color": "#d8ff7a"
+    }
+  ],
+  "stand": {
+    "style": "crystal",
+    "accent": "#8fb4ff"
+  }
+}
