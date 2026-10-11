@@ -1,0 +1,261 @@
+{
+  "id": "game-studio",
+  "name": "Game Studio",
+  "version": "0.13.0",
+  "description": "Describe a game, play it on your phone or computer, and make its sprites and sounds.",
+  "entry": "index.jsx",
+  "icon": "icon.png",
+  "offline_capable": false,
+  "theme_color": "#0b1020",
+  "background_color": "#0b1020",
+  "capabilities": {
+    "media.speech": {
+      "version": 1,
+      "reason": "Let games you make speak their lines with the Möbius voice.",
+      "limits": {
+        "max_text_chars": 400
+      }
+    }
+  },
+  "permissions": {},
+  "source_files": [
+    "AssetsPanel.jsx",
+    "agentPrompt.js",
+    "gameRuntime.js",
+    "models.js",
+    "voice.js",
+    "playtest.mjs",
+    "sounds.js",
+    "sprites.js",
+    "starter.js",
+    "starter3d.js",
+    "survivor3d.js",
+    "zzfx.js",
+    "NewGame.jsx",
+    "build_art.py",
+    "publish_game.py",
+    "make_asset.py",
+    "voice_lines.py",
+    "assetPrompt.js",
+    "aiJobs.js",
+    "libraryUi.jsx",
+    "CharactersPanel.jsx",
+    "CharacterPage.jsx",
+    "ModelView.jsx",
+    "kenney.py",
+    "packzip.py",
+    "sound_library.py",
+    "world_library.py",
+    "attach.mjs",
+    "model_tool.py",
+    "retarget.mjs",
+    "detailed.py",
+    "creature.py",
+    "tpose.py",
+    "tsr_raster.py",
+    "player/index.jsx",
+    "project/play_build.sh",
+    "play_build.py",
+    "play_bundle.mjs",
+    "engine.js",
+    "build_engine.mjs",
+    "seed_engine.py",
+    "perf_baseline.mjs",
+    "requestsBoard.jsx",
+    "LaunchedGame.jsx",
+    "requests_board.py",
+    "playtest_notes.py",
+    "kits/README.md",
+    "kits/catalog.json",
+    "kits/generate.mjs",
+    "kits/templates.js",
+    "kits/art/platformer-cartoon.json",
+    "kits/art/physics-cartoon.json",
+    "kits/art/racing-topdown.json",
+    "kits/art/puzzle-gems.json",
+    "kits/templates/puzzle.html",
+    "kits/templates/racing.html",
+    "kits/templates/physics.html",
+    "kits/templates/platformer.html",
+    "design_queue.py",
+    "game_project.py",
+    "project/README.md",
+    "project/gitignore",
+    "blender_clean.py",
+    "body_base.py",
+    "blender_bake.py",
+    "SceneEditor.jsx",
+    "sceneRuntime.js",
+    "scene.py",
+    "SCENE.md",
+    "gallery_room.py",
+    "gallery_preview.mjs",
+    "GALLERY_ROOMS.md",
+    "share_game.py",
+    "unpack_models.mjs",
+    "scene_perf.mjs",
+    "guest_share.py",
+    "local_storage.py",
+    "godot_build.py",
+    "kits/godot/starter/project.godot",
+    "kits/godot/starter/export_presets.cfg",
+    "kits/godot/starter/main.tscn",
+    "kits/godot/starter/main.gd",
+    "kits/godot/starter/player.gd",
+    "kits/godot/starter/cel.gd",
+    "kits/godot/starter/toon.gdshader",
+    "kits/godot/starter/outline.gdshader",
+    "kits/godot/starter/.gitignore",
+    "godot-web/v4.7.2/audio.worklet.js",
+    "godot-web/v4.7.2/audio.position.worklet.js",
+    "blender_char.py",
+    "blender_char_inner.py",
+    "blender_prop.py",
+    "blender_prop_inner.py",
+    "BUILDER.md",
+    "builder_tools.py",
+    "surface_library.py",
+    "dress.py",
+    "dress_inner.py",
+    "kits/godot/view/studio_view.gd",
+    "kits/godot/view/studio_view_cut.gdshader"
+  ],
+  "schedule": {
+    "default": "* * * * *",
+    "job": "job.sh",
+    "user_configurable": false
+  },
+  "project_templates": [
+    {
+      "id": "game",
+      "name": "Game",
+      "kind": "game",
+      "description": "A Game Studio game inside Projects: its Scene, Characters and Assets beside the game's files and chats, with a history of every change.",
+      "guidance": "This Project is one Game Studio game. game.html is the whole game (one self-contained HTML page), game.json its info (keep its \"id\"; \"studioAppId\" is the Game Studio app), art.json art made for this game only. Game Studio plays a copy of these files: after editing, run `python3 /data/apps/game-studio/game_project.py sync-folder .` from this folder so the studio gets the change at once and the history records it (otherwise it syncs within a minute). For how games are built (the studio runtime, 3D, characters, art), read /data/apps/game-studio/agentPrompt.js. The person builds and plays games in Game Studio; point them there to play. Invited collaborators (Share → Work together) play the current files with the project's Play build (play_build.py packs the engine and art into one offline page); if requests.md has wishes from collaborators, treat them as suggestions for the owner to confirm.",
+      "files": {
+        "README.md": "project/README.md",
+        ".gitignore": "project/gitignore"
+      },
+      "artifact_types": [
+        {
+          "id": "game",
+          "name": "Game",
+          "extensions": [
+            "html"
+          ],
+          "preview": "html",
+          "script": "project/play_build.sh",
+          "output": "play.html",
+          "storage_reads": [
+            "assets.json",
+            "models",
+            "audio",
+            "art"
+          ]
+        }
+      ],
+      "previews": [
+        {
+          "id": "play",
+          "name": "Play",
+          "source": "game.html",
+          "builder": "game"
+        }
+      ],
+      "workspace": "app",
+      "workspace_tabs": [
+        {
+          "id": "studio",
+          "name": "Scene",
+          "icon": "play",
+          "assistant": true
+        },
+        {
+          "id": "characters",
+          "name": "Characters",
+          "icon": "user"
+        },
+        {
+          "id": "assets",
+          "name": "Assets",
+          "icon": "cube"
+        }
+      ],
+      "guest_storage": {
+        "vars": {
+          "game": {
+            "file": "game.json",
+            "field": "id"
+          }
+        },
+        "routes": [
+          {
+            "key": "games/{game}.html",
+            "version": "game.html"
+          },
+          {
+            "key": "games/{game}.json",
+            "version": "game.json"
+          },
+          {
+            "key": "games/{game}.art.json",
+            "version": "art.json"
+          },
+          {
+            "key": "games/{game}.scene.json",
+            "version": "scene.json"
+          },
+          {
+            "key": "assets.json",
+            "version": ".studio/assets.json",
+            "shared": "guest-share/{project}/assets.json",
+            "merge": true
+          },
+          {
+            "prefix": "models/",
+            "version": ".studio/models/",
+            "shared": "guest-share/{project}/models/"
+          },
+          {
+            "prefix": "art/",
+            "shared": "art/"
+          },
+          {
+            "prefix": "engine/",
+            "shared": "engine/"
+          }
+        ]
+      },
+      "guest_guidance": "This project is a Game Studio game. scene.json is its 3D scene, game.json its info, art.json its own art. Read .studio/GUIDE.md before your first change: it explains the scene format, lists the characters and models this game can use by name, and shows how to make pictures, sounds and 3D objects with the studio's tools in ../tools/game-studio. The guest sees your changes in the studio on the project page after each reply.",
+      "guest_tools": {
+        "dir": "game-studio",
+        "files": [
+          "build_art.py",
+          "local_storage.py",
+          "make_asset.py",
+          "model_tool.py",
+          "shapes.py",
+          "gs_deps.py",
+          "mobius.json",
+          "SCENE.md"
+        ]
+      }
+    }
+  ],
+  "static_assets": {
+    "godot/4.7.2/audio.worklet.js": "godot-web/v4.7.2/audio.worklet.js",
+    "godot/4.7.2/audio.position.worklet.js": "godot-web/v4.7.2/audio.position.worklet.js"
+  },
+  "package_id": "6c500b10-c93b-45f3-a2a5-007db0f60b6d",
+  "store": {
+    "tagline": "Describe a game, then play and build it on your phone or computer",
+    "description": "Tell the studio's agent what game you want and it builds a playable version: 2D games, 3D worlds and Godot scenes that run on phones and computers.\n\n• Studio: play your game, switch to Edit to tap things and ask the agent to change them, with undo and a version saved after every turn.\n• Characters: make and dress 3D characters your games can use.\n• Assets: pixel sprites, picture uploads, sound effects, plus free CC0 sounds, music, skies and ground materials from Kenney, OpenGameArt, Poly Haven and ambientCG.\n• Each game is a Project with its own history; share it to play or invite people to work on it together.\n• Phone controls (on-screen stick and buttons), keyboard and gamepads.\n\nOptional: a Hugging Face or 3D AI Studio key unlocks AI-made 3D models.",
+    "screenshots": [
+      {
+        "src": "static/store/studio.png",
+        "alt": "Game Studio on first open: an empty studio asking what you want to make, with starter ideas",
+        "label": "Describe your game"
+      }
+    ]
+  }
+}
