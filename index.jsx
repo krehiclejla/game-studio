@@ -11,8 +11,6 @@ import { studioAgentPrompt } from './agentPrompt.js'
 import SceneEditor, { SCENE_CSS } from './SceneEditor.jsx'
 import { REQUESTS_CSS, RequestsSheet, askMessage, noteMessage, usePlaytestNotes, useRequestBoard } from './requestsBoard.jsx'
 import { EMPTY_SCENE, sceneDocument } from './sceneRuntime.js'
-import { STARTER_HTML, STARTER_META } from './starter.js'
-import { STARTER_3D_HTML, STARTER_3D_META } from './starter3d.js'
 import { MODEL_CATALOG, blobToBase64, checkModelFile, fetchCatalogModel } from './models.js'
 import { createVoice } from './voice.js'
 import { modelFor, setModelToken } from './aiModel.js'
@@ -380,48 +378,12 @@ async function loadGames() {
     .sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')))
 }
 
-const STARTERS = [
-  { meta: STARTER_META, html: STARTER_HTML },
-  { meta: STARTER_3D_META, html: STARTER_3D_HTML, model: 'robot' },
-]
-const STARTER_IDS = new Set(STARTERS.map((s) => s.meta.id))
-
 async function addModel(assets, name, blob, info) {
   await store().setBlob(`models/${name}.glb`, blob, { contentType: 'model/gltf-binary' })
   const latest = (await store().get('assets.json')) || assets
   const next = { sprites: {}, sounds: {}, ...latest, models: { ...(latest.models || {}), [name]: { ...info, size: blob.size } } }
   await store().set('assets.json', next)
   return next
-}
-
-// Each starter is added once. A starter the person already has (or deleted
-// after it was seeded) is never rewritten.
-async function seedStarters(existing, token) {
-  const seeded = (await store().get('seeded.json')) || []
-  if (STARTERS.every((starter) => seeded.includes(starter.meta.id))) return []
-  const added = []
-  for (const starter of STARTERS) {
-    if (seeded.includes(starter.meta.id)) continue
-    seeded.push(starter.meta.id)
-    if (existing.some((g) => g.id === starter.meta.id)) continue
-    if (starter.model) {
-      const assets = (await store().get('assets.json')) || {}
-      const entry = MODEL_CATALOG.find((m) => m.name === starter.model)
-      if (entry && !assets.models?.[entry.name]) {
-        try {
-          await addModel(assets, entry.name, await fetchCatalogModel(entry, token), { title: entry.title, credit: entry.credit })
-        } catch {
-          // The game falls back to a simple character; the model can be added later in Assets.
-        }
-      }
-    }
-    const meta = { ...starter.meta, updatedAt: new Date().toISOString() }
-    await store().setText(`games/${meta.id}.html`, starter.html, { contentType: 'text/html' })
-    await store().set(`games/${meta.id}.json`, meta)
-    added.push(meta)
-  }
-  await store().set('seeded.json', seeded)
-  return added
 }
 
 // Keeps one version per distinct game file so any change can be undone.
@@ -686,9 +648,7 @@ export default function App({ appId, token }) {
   const playVisible = tab === 'studio'
 
   const refreshGames = useCallback(async () => {
-    let list = await loadGames()
-    const added = guestRef.current ? [] : await seedStarters(list, token)
-    if (added.length) list = [...added, ...list]
+    const list = await loadGames()
     setGames(list)
     setCurrentId((id) => (id && list.some((g) => g.id === id) ? id : list[0]?.id ?? null))
     setGamesLoaded(true)
