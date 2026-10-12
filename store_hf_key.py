@@ -16,7 +16,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-APP_ID = sys.argv[1] if len(sys.argv) > 1 else '12'
+from studio_app import app_id as _studio_app_id
+APP_ID = sys.argv[1] if len(sys.argv) > 1 else _studio_app_id()
 NAME = sys.argv[2] if len(sys.argv) > 2 else 'hf-token'
 DATA = Path('/data')
 

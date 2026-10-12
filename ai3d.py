@@ -22,8 +22,9 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from studio_app import app_id
+
 API = 'https://api.3daistudio.com'
-APP_ID = os.environ.get('GS_APP_ID', '12')
 SECRET = '3daistudio-key'
 POLL = 25          # seconds between status checks (the API allows 3 requests a minute)
 
@@ -38,7 +39,7 @@ def key():
         return os.environ['THREEDAI_KEY']
     base = os.environ.get('API_BASE_URL', 'http://127.0.0.1:8000').rstrip('/')
     token = os.environ.get('AGENT_TOKEN') or os.environ.get('APP_TOKEN')
-    req = urllib.request.Request(f'{base}/api/apps/{APP_ID}/secrets/{SECRET}', headers={'Authorization': f'Bearer {token}'})
+    req = urllib.request.Request(f'{base}/api/apps/{app_id()}/secrets/{SECRET}', headers={'Authorization': f'Bearer {token}'})
     try:
         return urllib.request.urlopen(req, timeout=20).read().decode().strip() or None
     except Exception:

@@ -422,13 +422,19 @@ def local3d(png, out, res=192, project=True):
     print(json.dumps({'ok': True, 'out': str(out), 'bytes': Path(out).stat().st_size, 'next': f'rig it: detailed.py rig {out} RIGGED.glb'}))
 
 
+def studio_app_id():
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from studio_app import app_id
+    return app_id()
+
+
 def hf_token():
     """The owner's Hugging Face key: Game Studio's app secret 'hf-token' (or HF_TOKEN)."""
     if os.environ.get('HF_TOKEN'):
         return os.environ['HF_TOKEN']
     base = os.environ.get('API_BASE_URL', 'http://127.0.0.1:8000').rstrip('/')
     token = os.environ.get('AGENT_TOKEN') or os.environ.get('APP_TOKEN')
-    req = urllib.request.Request(f'{base}/api/apps/{os.environ.get("GS_APP_ID", "12")}/secrets/hf-token',
+    req = urllib.request.Request(f'{base}/api/apps/{studio_app_id()}/secrets/hf-token',
                                  headers={'Authorization': f'Bearer {token}'})
     try:
         return urllib.request.urlopen(req, timeout=20).read().decode().strip()
