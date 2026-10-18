@@ -24,20 +24,31 @@ APP = os.environ.get('APP_ID', '12')
 JOBS = 'design-jobs.json'
 MAX_RUNNING = 2   # 3D is made one step at a time on this machine; two keeps it busy
 TIMEOUT_MS = 20 * 60 * 1000
-CREATIVE = ('claude-opus-5-5', 'claude-opus', 'claude-sonnet')  # preferred families, best first
+CREATIVE = ('claude-opus-5-5', 'claude-opus', 'claude-sonnet', 'evolve')  # preferred families, best first
+LAST_RESORT_PROVIDER = 'mobius'
 
 
 def creative_model():
-    """A strong model the person has connected (Möbius lists only those), else None so
-    the chat uses their own default model."""
+    """A strong model from a provider that is signed in, else any Möbius model, else
+    None so the chat uses the person's default. Möbius's model list includes
+    providers that are not signed in, so filter it by the provider status (same
+    rule as aiModel.js); a chat with no model can land on a disconnected Claude."""
     status, data, _ = call('GET', '/api/models')
-    ids = [str(m.get('id')) for models in ((data or {}).get('providers') or {}).values() for m in models
-           if m.get('available', True)] if status == 200 else []
+    if status != 200:
+        return None
+    auth_status, auth, _ = call('GET', '/api/auth/providers/status')
+    by_provider = {}
+    for provider, models in ((data or {}).get('providers') or {}).items():
+        state = (auth or {}).get(provider) or {}
+        if auth_status == 200 and not (state.get('configured') and state.get('available', True) is not False):
+            continue
+        by_provider[provider] = [str(m.get('id')) for m in models or [] if m.get('available', True)]
+    ids = [i for models in by_provider.values() for i in models]
     for prefix in CREATIVE:
         hit = next((i for i in ids if i.startswith(prefix)), None)
         if hit:
             return hit
-    return None
+    return next(iter(by_provider.get(LAST_RESORT_PROVIDER) or []), None)
 
 
 def call(method, path, body=None, headers=None):

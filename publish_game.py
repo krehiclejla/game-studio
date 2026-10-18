@@ -210,6 +210,7 @@ def write_package(target, game, html, data, studio_app_id, voice_mode, saves, ve
     shutil.copyfile(PLAYER / 'index.jsx', target / 'index.jsx')
     shutil.copyfile(ROOT / 'gameRuntime.js', target / 'gameRuntime.js')
     shutil.copyfile(ROOT / 'voice.js', target / 'voice.js')
+    shutil.copyfile(ROOT / 'aiModel.js', target / 'aiModel.js')
     shutil.copyfile(ROOT / '.gitignore', target / '.gitignore')
 
     palette = (data.get('art') or {}).get('palette') or {}
@@ -258,7 +259,7 @@ def write_package(target, game, html, data, studio_app_id, voice_mode, saves, ve
         # On a public playtest link, players may leave notes for the maker
         # (player/index.jsx) and read what the game publishes under public/ (studio.publicWrite).
         'public_access': {'storage': {'read': True, 'write_prefix': 'public/notes/'}},
-        'source_files': ['game.js', 'data.js', *names, 'gameRuntime.js', 'voice.js'],
+        'source_files': ['game.js', 'data.js', *names, 'gameRuntime.js', 'voice.js', 'aiModel.js'],
     }
     if listing:
         spec, art_dir = listing['spec'], target / 'static' / 'store'

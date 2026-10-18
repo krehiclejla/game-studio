@@ -6,6 +6,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Comment, EditPencil, X } from '@openai/apps-sdk-ui/components/Icon'
 import { buildGameDocument, relayVisibility } from './gameRuntime.js'
 import { createVoice } from './voice.js'
+import { modelFor, setModelToken } from './aiModel.js'
 import { GAME } from './game.js'
 import DATA from './data.js'
 
@@ -68,7 +69,8 @@ html, body, #root { height: 100%; }
 `
 
 const store = () => window.mobius?.storage
-export default function GameApp({ appId }) {
+export default function GameApp({ appId, token }) {
+  setModelToken(token)
   const frameRef = useRef(null)
   const savesRef = useRef(null)
   const motionRef = useRef(null)
@@ -139,7 +141,7 @@ export default function GameApp({ appId }) {
       else await Promise.resolve(store()?.remove(path)).catch(() => {})
       if (!window.mobius?.chat?.start) throw new Error('this app has no access to the room builder')
       const draft = `Build a room for my Dream Gallery.\n\nThe vibe I want: “${vibe}”\n${name ? `Its name: ${name}` : 'Give it a fitting name.'}\n${req.mode === 'reshape' ? 'This room already exists: change it the way I describe and keep everything I did not mention.\n' : ''}\nYou are the gallery's room builder. Be quick: I am watching a progress bar. Read /data/apps/game-studio/GALLERY_ROOMS.md first (the recipe format and your tools), pick the closest starter with gallery_room.py, and adapt it heavily to my vibe. The gallery app id is ${appId} and this room's id is ${id}.${req.mode === 'reshape' ? ` Start from the current recipe: python3 /data/apps/game-studio/gallery_room.py show ${appId} ${id}` : ''}\nWrite the whole recipe as a JSON file in one go, then run it once with:\npython3 /data/apps/game-studio/gallery_room.py put ${appId} ${id} recipe.json --preview\nThat puts the room in my gallery (it shows up live) and renders screenshots: Read them, fix only what is clearly wrong with one more put, then stop. When you are done, reply with one or two friendly sentences about the room.`
-      const { chatId } = await window.mobius.chat.start({ title: `Room: ${label}`, draft })
+      const { chatId } = await window.mobius.chat.start({ ...(await modelFor('creative')), title: `Room: ${label}`, draft })
       chatsRef.current = { ...chatsRef.current, [id]: { chatId, name: label } }
       Promise.resolve(store()?.set('room-chats.json', chatsRef.current)).catch(() => {})
       watchRoom(id, { rev: baseRev })

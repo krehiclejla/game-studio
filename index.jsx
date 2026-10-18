@@ -1131,7 +1131,7 @@ export default function App({ appId, token }) {
     if (!target) throw new Error('Start a game first.')
     if (guestRef.current) {
       // The project page sends it to the guest's assistant and shows the reply.
-      await window.mobius.chat.start({ title: target.name, draft: text })
+      await window.mobius.chat.start({ ...(await modelFor('creative')), title: target.name, draft: text })
       setTab('studio')
       return
     }
