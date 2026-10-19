@@ -24,7 +24,7 @@ APP = os.environ.get('APP_ID', '12')
 JOBS = 'design-jobs.json'
 MAX_RUNNING = 2   # 3D is made one step at a time on this machine; two keeps it busy
 TIMEOUT_MS = 20 * 60 * 1000
-CREATIVE = ('claude-opus-5-5', 'claude-opus', 'claude-sonnet', 'evolve')  # preferred families, best first
+CREATIVE = ('claude-opus-5-5', 'claude-opus', 'claude-sonnet', 'gpt-5.6-sol', 'gpt-', 'evolve')  # best first; Möbius last (it may be out of credits and apps cannot see the balance)
 LAST_RESORT_PROVIDER = 'mobius'
 
 

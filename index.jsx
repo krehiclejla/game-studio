@@ -13,7 +13,7 @@ import { REQUESTS_CSS, RequestsSheet, askMessage, noteMessage, usePlaytestNotes,
 import { EMPTY_SCENE, sceneDocument } from './sceneRuntime.js'
 import { MODEL_CATALOG, blobToBase64, checkModelFile, fetchCatalogModel } from './models.js'
 import { createVoice } from './voice.js'
-import { modelFor, setModelToken } from './aiModel.js'
+import { embedOptions, keepsChat, modelFor, scopeFor, setModelToken } from './aiModel.js'
 
 const CSS = `
 * { box-sizing: border-box; }
@@ -427,7 +427,7 @@ function StudioChat({ appId, game, onTurnDone, onSent }) {
     let handle
     let disposed = false
     setError('')
-    modelFor('creative').then((pick) => window.mobius.chat({
+    embedOptions(`chats/${game.id}.json`, 'creative').then((pick) => window.mobius.chat({
       ...pick,
       mount,
       persist: `chats/${game.id}.json`,
@@ -769,11 +769,12 @@ export default function App({ appId, token }) {
       setTimeout(() => setPublishing(false), 4 * 60 * 1000)
     }
     try {
+      const pick = await modelFor('quick')
       await window.mobius.chat.start({
-        scope: `publish:${key}`,
+        scope: await scopeFor(`publish:${key}`, pick),
         ownerVisible: false,
         title: `Install ${name} as an app`,
-        ...(await modelFor('quick')),
+        ...pick,
         systemPrompt: 'You install Game Studio games as Möbius apps. Run the one command you are given with the Bash tool, then reply in one short sentence saying whether it worked. If it fails, say why in plain words. Do nothing else.',
         draft: `Run: python3 ${STUDIO_DIR}/publish_game.py ${appId} ${gameId}`,
       })
@@ -1056,11 +1057,12 @@ export default function App({ appId, token }) {
   const startGodotGame = async ({ id, name }, retry = false) => {
     await store().set(`games/${id}.start.json`, { state: 'queued', at: new Date().toISOString() })
     if (!window.mobius?.chat?.start) return
+    const pick = await modelFor('quick')
     window.mobius.chat.start({
-      scope: retry ? `godot-new:${id}:${Date.now()}` : `godot-new:${id}`,
+      scope: retry ? `godot-new:${id}:${Date.now()}` : await scopeFor(`godot-new:${id}`, pick),
       ownerVisible: false,
       title: `Start ${name}`,
-      ...(await modelFor('quick')),
+      ...pick,
       systemPrompt: 'You start new Game Studio games. Run the one command you are given in the shell, with a 10-minute timeout (the first game downloads the game engine). Then reply in one short sentence saying whether it worked. If it fails, say why in plain words. Do nothing else.',
       draft: `Run: python3 ${STUDIO_DIR}/godot_build.py new ${appId} ${id} ${JSON.stringify(name)}`,
     }).catch(() => store().set(`games/${id}.start.json`, { state: 'failed', at: new Date().toISOString(), message: 'The studio could not start its helper.' }).catch(() => {}))
@@ -1136,7 +1138,7 @@ export default function App({ appId, token }) {
       return
     }
     const saved = await store().get(`chats/${target.id}.json`).catch(() => null)
-    if (saved?.id) {
+    if (saved?.id && await keepsChat(saved.id)) {
       let timezone = 'UTC'
       try { timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' } catch {}
       const res = await fetch(`/api/chats/${encodeURIComponent(saved.id)}/messages`, {
@@ -1146,9 +1148,10 @@ export default function App({ appId, token }) {
       })
       if (!res.ok) throw new Error(res.status === 409 ? 'The studio agent is still working on the last request. Try again when it finishes.' : 'The studio chat did not accept that. Try again.')
     } else {
+      const pick = await modelFor('creative')
       const { chatId } = await window.mobius.chat.start({
-        ...(await modelFor('creative')),
-        scope: `game:${target.id}`, ownerVisible: false, title: target.name,
+        ...pick,
+        scope: await scopeFor(`game:${target.id}`, pick), ownerVisible: false, title: target.name,
         systemPrompt: studioAgentPrompt({ appId, game: target }), draft: text,
       })
       await store().set(`chats/${target.id}.json`, { id: chatId })

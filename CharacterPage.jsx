@@ -5,7 +5,7 @@ import { ArrowLeft, Play, Plus, Trash } from '@openai/apps-sdk-ui/components/Ico
 import { editorPrompt } from './assetPrompt.js'
 import { SheetPreview } from './libraryUi.jsx'
 import ModelView from './ModelView.jsx'
-import { modelFor } from './aiModel.js'
+import { embedOptions, modelFor } from './aiModel.js'
 
 // Moves from the free Quaternius Universal Animation Library (CC0) that fit any humanoid:
 // [label, library clip, the name games use].
@@ -122,7 +122,7 @@ function CharacterChat({ appId, name, onTurnDone }) {
     if (!mount || !window.mobius?.chat) return undefined
     let handle
     let disposed = false
-    modelFor('creative').then((pick) => window.mobius.chat({
+    embedOptions(`character-chats/${name}.json`, 'creative').then((pick) => window.mobius.chat({
       ...pick,
       mount,
       persist: `character-chats/${name}.json`,
